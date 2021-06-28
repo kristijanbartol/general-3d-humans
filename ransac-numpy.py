@@ -114,7 +114,7 @@ if __name__ == '__main__':
     except Exception as ex:
         print(f'[GT data + GT camera params] {ex}')
 
-    scale = (t_rel_gt / t_rel[0]).mean()
+    scale = (t_rel_gt / t_rel).mean()
 
     try:
         t_rel = t_rel * scale
@@ -155,9 +155,10 @@ if __name__ == '__main__':
         try:
         # Select correct rotation and find translation sign.
         # NOTE: For now, not estimating translation (None argument).
+            t_rel_est *= scale
             R_est, t_rel_est = solve_four_solutions_numpy(
                 point_corresponds, Ks, Rs, ts, 
-                (R_est1, R_est2), None)
+                (R_est1, R_est2), t_rel_est)
         except:
             print('Not all positive')
             continue
@@ -172,16 +173,13 @@ if __name__ == '__main__':
 
         # Evaluate projection in 2D.
         kpts_2d_projs, error_2d = evaluate_projection_numpy(
-            all_3d_gt, Ks, Rs, ts, R_est, t_rel_est=None)
+            all_3d_gt, Ks, Rs, ts, R_est, t_rel_est)
         # Evaluate reconstruction in 3D.
         error_3d, _ = evaluate_reconstruction_numpy(
-            all_3d_gt, kpts_2d_projs, Ks, Rs, ts, R_est, t_rel_est=None)
-
+            all_3d_gt, kpts_2d_projs, Ks, Rs, ts, R_est, t_rel_est)
+        # Evaluate rotation (compare quaternions).
         R_est_quat = R.from_dcm(R_est).as_quat()
         R_rel_gt_quat = R.from_dcm(R_rel_gt).as_quat()
-
-        #quaternion_est = kornia.rotation_matrix_to_quaternion(R_initial)
-        #quaternion_gt = kornia.rotation_matrix_to_quaternion(R_gt)
         quat_norm = np.linalg.norm(R_rel_gt_quat - R_est_quat, ord=1)
 
         print(f'{counter}. ({num_inliers}, {line_dists.mean():.3f}) -> '
