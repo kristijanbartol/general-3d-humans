@@ -6,7 +6,7 @@ import cv2
 
 from mvn.utils.trifocal import Trifocal
 
-IDXS = [3, 0]
+#IDXS = [3, 0]
 #IDXS = [3, 1, 2]
 
 
@@ -263,6 +263,20 @@ def find_rotation_matrices(points, alg_confidences, Ks, device='cuda'):
     return R1, R2, t, F
 
 
+def find_rotation_matrices_numpy(points, alg_confidences, Ks):
+    K1 = Ks[0]
+    K2 = Ks[1]
+
+    points1 = points[:, 0]
+    points2 = points[:, 1]
+    
+    F, _ = cv2.findFundamentalMat(points1, points2, method=cv2.FM_8POINT, confidence=1.)
+    E = K2.T @ F @ K1
+    R1, R2, t = cv2.decomposeEssentialMat(E)
+
+    return R1, R2, t, F
+
+
 def compare_rotations(R_matrices, est_proj_matrices):
     rot_mat1 = R_matrices[0, 0]
     rot_mat2 = R_matrices[0, 1]
@@ -315,6 +329,42 @@ def solve_four_solutions(point_corresponds, Ks, Rs, ts, R_cands, t_rel=None):
     return candidate_tuples[sign_outcomes.index(True)]
 
 
+def solve_four_solutions_numpy(point_corresponds, Ks, Rs, ts, R_cands, t_rel=None):
+    K1 = Ks[0]
+    K2 = Ks[1]
+
+    R1 = Rs[0]
+
+    t1 = ts[0]
+    t2 = ts[1] if t_rel is None else Rs[1] @ np.linalg.inv(Rs[0]) @ ts[0] + t_rel
+
+    extr1 = np.concatenate((R1, t1), axis=1)
+
+    if t_rel is not None:
+        candidate_tuples = [(R_cands[0], t2), (R_cands[0], -t2), (R_cands[1], t2), (R_cands[1], -t2)]
+    else:
+        candidate_tuples = [(R_cands[0], ts[1]), (R_cands[0], -ts[1]), (R_cands[1], ts[1]), (R_cands[1], -ts[1])]
+
+    sign_outcomes = []
+    sign_condition = lambda x: np.all(x[:, 2] > 0.)
+
+    # TODO: Speed up.
+    for Rt in candidate_tuples:
+        R_rel_est = Rt[0]
+        R2_est = R_rel_est @ R1
+
+        extr2_est = np.concatenate((R2_est, Rt[1]), axis=1)
+
+        P1 = K1 @ extr1
+        P2_est = K2 @ extr2_est
+
+        kpts_3d_est = cv2.triangulatePoints(
+            P1, P2_est, point_corresponds[:, 0].T, point_corresponds[:, 1].T)
+        sign_outcomes.append(sign_condition(kpts_3d_est))
+
+    return candidate_tuples[sign_outcomes.index(True)]
+
+
 def create_fundamental_matrix(Ks, Rs, ts):
     R1 = Rs[:, 0]
     t1 = ts[:, 0]
@@ -337,47 +387,6 @@ def project(kpts_3d_gt, K, R, t):
         np.ones((kpts_3d_gt.shape[0], kpts_3d_gt.shape[1], 1))), axis=2)
     kpts_2d_gt = kpts_3d_gt @ np.swapaxes(K @ extr, 0, 1)
     #kpts_2d_gt 
-
-    return kpts_2d_gt
-
-
-def evaluate_projection_np(kpts_3d_gt, K, R, t):
-    '''
-    K1 = Ks[0]
-    K2 = Ks[1]
-
-    R1 = Rs[0]
-    R2 = Rs[1]
-    R2_est = R_rel_est @ R1
-
-    t1 = ts[0]
-    t2 = ts[1]
-    '''
-
-    '''
-    extr1 = np.concatenate((R1, t1), axis=1)
-    extr2 = np.concatenate((R2, t2), axis=1)
-    extr2_est = np.concatenate((R2_est, t2), axis=1)
-    '''
-    extr = np.concatenate((R, t), axis=1)
-
-    '''
-    K1 = np.expand_dims(K1, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    K2 = np.expand_dims(K2, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    extr1 = np.expand_dims(extr1, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    extr2 = np.expand_dims(extr2, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    extr2_est = np.expand_dims(extr2_est, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    '''
-    K = np.expand_dims(K, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-    extr = np.expand_dims(extr, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
-
-    if len(kpts_3d_gt.shape) == 2:
-        kpts_3d_gt = np.concatenate((kpts_3d_gt, np.ones((kpts_3d_gt.shape[0], 1))), axis=1)
-    else:
-        kpts_3d_gt = np.concatenate((kpts_3d_gt, np.ones((kpts_3d_gt.shape[0], kpts_3d_gt.shape[1], 1))), axis=2)
-
-    kpts_2d_gt = kpts_3d_gt @ np.swapaxes(K @ extr, 1, 2)
-    kpts_2d_gt = (kpts_2d_gt / kpts_2d_gt[:, :, 2].reshape(kpts_2d_gt.shape[0], kpts_2d_gt.shape[1], 1))[:, :, :2]
 
     return kpts_2d_gt
 
@@ -448,6 +457,42 @@ def evaluate_projection(kpts_3d_gt, Ks, Rs, t1, t2, R_rel_est, device='cuda'):
     return torch.stack((kpts_2d_gt1, kpts_2d_gt2), dim=0), error_2d
 
 
+def evaluate_projection_numpy(kpts_3d_gt, Ks, Rs, ts, R_rel_est, t_rel_est):
+    K1 = Ks[0]
+    K2 = Ks[1]
+
+    R1 = Rs[0]
+    R2 = Rs[1]
+    R2_est = R_rel_est @ R1
+
+    t1 = ts[0]
+    t2 = t_rel_est if t_rel_est is not None else ts[1]
+
+    extr1 = np.concatenate((R1, t1), axis=1)
+    extr2 = np.concatenate((R2, t2), axis=1)
+    extr2_est = np.concatenate((R2_est, t2), axis=1)
+
+    K1 = np.expand_dims(K1, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
+    K2 = np.expand_dims(K2, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
+    extr1 = np.expand_dims(extr1, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
+    extr2 = np.expand_dims(extr2, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
+    extr2_est = np.expand_dims(extr2_est, axis=0).repeat(kpts_3d_gt.shape[0], axis=0)
+
+    kpts_3d_gt = np.concatenate((kpts_3d_gt, np.ones((kpts_3d_gt.shape[0], kpts_3d_gt.shape[1], 1))), axis=2)
+
+    kpts_2d_gt2 = kpts_3d_gt @ np.swapaxes(K2 @ extr2, 1, 2)
+    kpts_2d_gt2 = (kpts_2d_gt2 / kpts_2d_gt2[:, :, 2].reshape(kpts_2d_gt2.shape[0], kpts_2d_gt2.shape[1], 1))[:, :, :2]
+    kpts_2d_est = kpts_3d_gt @ np.swapaxes(K2 @ extr2_est, 1, 2)
+    kpts_2d_est = (kpts_2d_est / kpts_2d_est[:, :, 2].reshape(kpts_2d_est.shape[0], kpts_2d_est.shape[1], 1))[:, :, :2]
+
+    kpts_2d_gt1 = kpts_3d_gt @ np.swapaxes(K1 @ extr1, 1, 2)
+    kpts_2d_gt1 = (kpts_2d_gt1 / kpts_2d_gt1[:, :, 2].reshape(kpts_2d_gt1.shape[0], kpts_2d_gt1.shape[1], 1))[:, :, :2]
+
+    error_2d = np.mean(np.linalg.norm(kpts_2d_gt2 - kpts_2d_est, axis=2))
+
+    return np.stack((kpts_2d_gt1, kpts_2d_gt2), axis=0), error_2d
+
+
 def evaluate_reconstruction(kpts_3d_gt, kpts_2d, Ks, Rs, t1, t2, R_rel_est):
     K1 = Ks[0]
     K2 = Ks[1]
@@ -475,7 +520,7 @@ def evaluate_reconstruction(kpts_3d_gt, kpts_2d, Ks, Rs, t1, t2, R_rel_est):
     return torch.mean(torch.norm(kpts_3d_gt - kpts_3d_est, dim=2)), kpts_3d_est
 
 
-def evaluate_reconstruction_np(kpts_3d_gt, kpts_2d, Ks, Rs, ts, R_rel_est):
+def evaluate_reconstruction_numpy(kpts_3d_gt, kpts_2d, Ks, Rs, ts, R_rel_est, t_rel_est):
     K1 = Ks[0]
     K2 = Ks[1]
 
@@ -484,7 +529,7 @@ def evaluate_reconstruction_np(kpts_3d_gt, kpts_2d, Ks, Rs, ts, R_rel_est):
     R2_est = R_rel_est @ R1
 
     t1 = ts[0]
-    t2 = ts[1]
+    t2 = t_rel_est if t_rel_est is not None else ts[1]
 
     extr1 = np.concatenate((R1, t1), axis=1)
     extr2 = np.concatenate((R2, t2), axis=1)
@@ -498,7 +543,7 @@ def evaluate_reconstruction_np(kpts_3d_gt, kpts_2d, Ks, Rs, ts, R_rel_est):
     kpts_2d_gt2 = kpts_2d[1]
 
     kpts_3d_est = cv2.triangulatePoints(P1, P2_est, kpts_2d_gt1.T, kpts_2d_gt2.T).T
-    kpts_3d_est = kpts_3d_est[:, :3] / kpts_3d_est[:, 3, np.newaxis]
+    kpts_3d_est = kpts_3d_est[:, :, :3] / kpts_3d_est[:, :, 3, np.newaxis]
 
     return np.mean(np.linalg.norm(kpts_3d_gt - kpts_3d_est, ord=2, axis=1)), kpts_3d_est
 
@@ -561,7 +606,7 @@ def distance_between_projections(x1, x2, Ks, R1, R_rel, t1, t2, device='cuda'):
     return formula(torch.inverse(R1) @ t1[:, 0], torch.inverse(R2) @ t2[:, 0], p1_, p2_)
 
 
-def distance_between_projections_np(x1, x2, K1, K2, R1, R_rel, t1, t2):
+def distance_between_projections_numpy(x1, x2, K1, K2, R1, R_rel, t1, t2):
     _x1 = np.concatenate((x1, np.ones((x1.shape[0], 1))), axis=1)
     _x2 = np.concatenate((x2, np.ones((x2.shape[0], 1))), axis=1)
 
