@@ -3,6 +3,7 @@ import torch
 import kornia
 import copy
 import cv2
+from scipy.spatial.transform import Rotation as R
 
 from mvn.utils.trifocal import Trifocal
 
@@ -263,7 +264,7 @@ def find_rotation_matrices(points, alg_confidences, Ks, device='cuda'):
     return R1, R2, t, F
 
 
-def find_rotation_matrices_numpy(points, alg_confidences, Ks):
+def find_rotation_matrices_numpy(points, Ks):
     K1 = Ks[0]
     K2 = Ks[1]
 
@@ -289,6 +290,22 @@ def compare_rotations(R_matrices, est_proj_matrices):
 
     diff1 = torch.norm(proj_mat1_quat - rel_rot_quat)
     diff2 = torch.norm(proj_mat2_quat - rel_rot_quat)
+
+    return min(diff1, diff2), np.argmin([diff1, diff2])
+
+
+def compare_rotations_numpy(R_matrices, est_proj_matrices):
+    rot_mat1 = R_matrices[0]
+    rot_mat2 = R_matrices[1]
+
+    rel_rot = rot_mat2 @ np.linalg.inv(rot_mat1)
+
+    rel_rot_quat = R.from_dcm(rel_rot).as_quat()
+    proj_mat1_quat = R.from_dcm(est_proj_matrices[0]).as_quat()
+    proj_mat2_quat = R.from_dcm(est_proj_matrices[1]).as_quat()
+
+    diff1 = np.linalg.norm(proj_mat1_quat - rel_rot_quat)
+    diff2 = np.linalg.norm(proj_mat2_quat - rel_rot_quat)
 
     return min(diff1, diff2), np.argmin([diff1, diff2])
 
@@ -340,10 +357,10 @@ def solve_four_solutions_numpy(point_corresponds, Ks, Rs, ts, R_cands, t_rel=Non
 
     extr1 = np.concatenate((R1, t1), axis=1)
 
-    if t_rel is not None:
-        candidate_tuples = [(R_cands[0], t2), (R_cands[0], -t2), (R_cands[1], t2), (R_cands[1], -t2)]
-    else:
-        candidate_tuples = [(R_cands[0], ts[1]), (R_cands[0], -ts[1]), (R_cands[1], ts[1]), (R_cands[1], -ts[1])]
+#    if t_rel is not None:
+    candidate_tuples = [(R_cands[0], t2), (R_cands[0], -t2), (R_cands[1], t2), (R_cands[1], -t2)]
+#    else:
+#        candidate_tuples = [(R_cands[0], ts[1]), (R_cands[0], -ts[1]), (R_cands[1], ts[1]), (R_cands[1], -ts[1])]
 
     sign_outcomes = []
     sign_condition = lambda x: np.all(x[:, 2] > 0.)
@@ -359,10 +376,12 @@ def solve_four_solutions_numpy(point_corresponds, Ks, Rs, ts, R_cands, t_rel=Non
         P2_est = K2 @ extr2_est
 
         kpts_3d_est = cv2.triangulatePoints(
-            P1, P2_est, point_corresponds[:, 0].T, point_corresponds[:, 1].T)
+            P1, P2_est, point_corresponds[:, 0].T, point_corresponds[:, 1].T).T
+        kpts_3d_est = cv2.convertPointsFromHomogeneous(kpts_3d_est).squeeze(axis=1)
         sign_outcomes.append(sign_condition(kpts_3d_est))
 
     return candidate_tuples[sign_outcomes.index(True)]
+    #return candidate_tuples[(sign_outcomes.index(True) + 1) % 4]
 
 
 def create_fundamental_matrix(Ks, Rs, ts):
@@ -539,11 +558,19 @@ def evaluate_reconstruction_numpy(kpts_3d_gt, kpts_2d, Ks, Rs, ts, R_rel_est, t_
     P2 = K2 @ extr2
     P2_est = K2 @ extr2_est
 
-    kpts_2d_gt1 = kpts_2d[0]
-    kpts_2d_gt2 = kpts_2d[1]
+    kpts_2d_gt1 = kpts_2d[0].reshape(-1, 2).T
+    kpts_2d_gt2 = kpts_2d[1].reshape(-1, 2).T
 
-    kpts_3d_est = cv2.triangulatePoints(P1, P2_est, kpts_2d_gt1.T, kpts_2d_gt2.T).T
-    kpts_3d_est = kpts_3d_est[:, :, :3] / kpts_3d_est[:, :, 3, np.newaxis]
+    #kp1_3D = np.ones((3, kpts_2d_gt1.shape[0]))
+    #kp2_3D = np.ones((3, kpts_2d_gt2.shape[0]))
+    #kp1_3D[0], kp1_3D[1] = kpts_2d_gt1[:, 0].copy(), kpts_2d_gt1[:, 1].copy()
+    #kp2_3D[0], kp2_3D[1] = kpts_2d_gt2[:, 0].copy(), kpts_2d_gt2[:, 1].copy()
+
+    kpts_3d_est = cv2.triangulatePoints(P1, P2_est, kpts_2d_gt1, kpts_2d_gt2).T
+    #kpts_3d_est = kpts_3d_est[:, :, :3] / kpts_3d_est[:, :, 3, np.newaxis]
+    kpts_3d_est = cv2.convertPointsFromHomogeneous(kpts_3d_est).squeeze(axis=1)
+
+    kpts_3d_gt = kpts_3d_gt.reshape(-1, 3)
 
     return np.mean(np.linalg.norm(kpts_3d_gt - kpts_3d_est, ord=2, axis=1)), kpts_3d_est
 
@@ -606,16 +633,21 @@ def distance_between_projections(x1, x2, Ks, R1, R_rel, t1, t2, device='cuda'):
     return formula(torch.inverse(R1) @ t1[:, 0], torch.inverse(R2) @ t2[:, 0], p1_, p2_)
 
 
-def distance_between_projections_numpy(x1, x2, K1, K2, R1, R_rel, t1, t2):
+def distance_between_projections_numpy(x1, x2, Ks, Rs, R_est, t1, t_rel_est):
+    K1 = Ks[0]
+    K2 = Ks[1]
+
+    R1 = Rs[0]
+
     _x1 = np.concatenate((x1, np.ones((x1.shape[0], 1))), axis=1)
     _x2 = np.concatenate((x2, np.ones((x2.shape[0], 1))), axis=1)
 
-    R2 = R_rel @ R1
+    R2 = R_est @ R1
 
     p1_ = np.swapaxes(np.linalg.inv(R1) @ np.linalg.inv(K1) @ np.swapaxes(_x1, 0, 1), 0, 1)
     p2_ = np.swapaxes(np.linalg.inv(R2) @ np.linalg.inv(K2) @ np.swapaxes(_x2, 0, 1), 0, 1)
 
-    return formula_np(np.linalg.inv(R1) @ t1[:, 0], np.linalg.inv(R2) @ t2[:, 0], p1_, p2_)
+    return formula_np(np.linalg.inv(R1) @ t1[:, 0], np.linalg.inv(R2) @ t_rel_est[:, 0], p1_, p2_)
 
 
 def distance_between_line_and_point(a, b, c, x, y):

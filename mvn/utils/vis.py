@@ -15,7 +15,7 @@ import PIL
 
 from mvn.utils.img import image_batch_to_numpy, to_numpy, denormalize_image, resize_image
 from mvn.utils.multiview import project_3d_points_to_image_plane_without_distortion, \
-    find_rotation_matrices, compare_rotations, create_fundamental_matrix, IDXS, evaluate_projection, evaluate_reconstruction
+    find_rotation_matrices, compare_rotations, create_fundamental_matrix, evaluate_projection, evaluate_reconstruction
 
 CONNECTIVITY_DICT = {
     'cmu': [(0, 2), (0, 9), (1, 0), (1, 17), (2, 12), (3, 0), (4, 3), (5, 4), (6, 2), (7, 6), (8, 7), (9, 10), (10, 11), (12, 13), (13, 14), (15, 1), (16, 15), (17, 18)],

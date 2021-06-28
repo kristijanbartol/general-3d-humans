@@ -1,9 +1,11 @@
 import numpy as np
 import os
+from scipy.spatial.transform import Rotation as R
 
 from mvn.utils.multiview import find_rotation_matrices_numpy, \
     solve_four_solutions_numpy, distance_between_projections_numpy, \
-    evaluate_projection_numpy, evaluate_reconstruction_numpy
+    evaluate_projection_numpy, evaluate_reconstruction_numpy, \
+    compare_rotations_numpy
 
 
 SUBJECT_IDX = 9
@@ -90,6 +92,53 @@ if __name__ == '__main__':
     t_rel_gt = -Rs[1] @ np.linalg.inv(Rs[0]) @ ts[0] + ts[1]
     scale = ...
 
+    ########### GT data + GT camera params ############
+    R_rel_gt = Rs[1] @ np.linalg.inv(Rs[0])
+    (kpts1_gt, kpts2_gt), _ = evaluate_projection_numpy(all_3d_gt, Ks, Rs, ts, R_rel_gt, ts[1])
+    kpts1_gt = kpts1_gt.reshape((-1, 2))
+    kpts2_gt = kpts2_gt.reshape((-1, 2))
+
+    t_rel_gt = -Rs[1] @ np.linalg.inv(Rs[0]) @ ts[0] + ts[1]
+    
+    dists = distance_between_projections_numpy(kpts1_gt, kpts2_gt, Ks, Rs, R_rel_gt, ts[0], ts[1])
+    condition = dists < D
+    num_inliers = (condition).sum()
+
+    print(f'Mean distances between corresponding lines (GT all): {dists.mean()}')
+
+    assert(num_inliers == point_corresponds.shape[0])
+
+    inliers = np.stack((kpts1_gt, kpts2_gt), axis=1)[condition]
+    try:
+        R_gt1, R_gt2, t_rel, F = find_rotation_matrices_numpy(inliers, Ks)
+    except Exception as ex:
+        print(f'[GT data + GT camera params] {ex}')
+
+    scale = (t_rel_gt / t_rel[0]).mean()
+
+    try:
+        t_rel = t_rel * scale
+        R_gt, t2 = solve_four_solutions_numpy(inliers, Ks, Rs, ts, (R_gt1, R_gt2), t_rel)
+    except Exception as ex:
+        #print(ex)
+        R_sim, m_idx = compare_rotations_numpy(Rs, (R_gt1, R_gt2))
+        R_gt = R_gt1 if m_idx == 0 else R_gt2
+        t2 = ts[1]
+        print('Not all positive (GT data + camera params)')
+
+    kpts_2d_projs, error_2d = evaluate_projection_numpy(all_3d_gt, Ks, Rs, ts, R_gt, t2)
+    error_3d, _ = evaluate_reconstruction_numpy(all_3d_gt, kpts_2d_projs, Ks, Rs, ts, R_gt, t2)
+
+    R_gt_quat = R.from_dcm(R_gt).as_quat()
+    Rs_rel_quat = R.from_dcm(R_rel_gt).as_quat()
+    rot_error = np.mean(np.abs(R_gt_quat - Rs_rel_quat))
+
+    t_error = np.linalg.norm(t2 - ts[1])
+    # TODO: Estimate and evaluate K.
+    
+    print(f'[GT data + GT camera params]: ({error_2d:.4f}, {error_3d:.4f}), ({rot_error:.4f}, {t_error:.4f})')
+    ###################################################
+
     counter = 0
 
     # RANSAC loop.
@@ -101,7 +150,7 @@ if __name__ == '__main__':
         # Find camera parameters using 8-point algorithm.
         # TODO: Rename: find_rotation_matrices* -> find_camera_parameters*.
         R_est1, R_est2, t_rel_est, _ = find_rotation_matrices_numpy(
-            point_corresponds[selected_idxs], None, Ks)
+            point_corresponds[selected_idxs], Ks)
 
         try:
         # Select correct rotation and find translation sign.
@@ -116,7 +165,7 @@ if __name__ == '__main__':
         # Find inliers based on 3D line distances.
         line_dists = distance_between_projections_numpy(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], Ks[1], Rs[0], R_est, ts[0], t_rel_est)
+            Ks, Rs, R_est, ts[0], t_rel_est)
 
         condition = line_dists < D
         num_inliers = (condition).sum()
@@ -128,5 +177,14 @@ if __name__ == '__main__':
         error_3d, _ = evaluate_reconstruction_numpy(
             all_3d_gt, kpts_2d_projs, Ks, Rs, ts, R_est, t_rel_est=None)
 
+        R_est_quat = R.from_dcm(R_est).as_quat()
+        R_rel_gt_quat = R.from_dcm(R_rel_gt).as_quat()
+
+        #quaternion_est = kornia.rotation_matrix_to_quaternion(R_initial)
+        #quaternion_gt = kornia.rotation_matrix_to_quaternion(R_gt)
+        quat_norm = np.linalg.norm(R_rel_gt_quat - R_est_quat, ord=1)
+
         print(f'{counter}. ({num_inliers}, {line_dists.mean():.3f}) -> '
-            f'{error_2d:.2f}, {error_3d:.2f}')
+            f'{quat_norm:.2f} {error_2d:.2f}, {error_3d:.2f}')
+
+        counter += 1

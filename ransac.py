@@ -11,7 +11,7 @@ import os
 from scipy.spatial.transform import Rotation as R
 import copy
 
-from mvn.utils.multiview import create_fundamental_matrix, IDXS, find_rotation_matrices, compare_rotations, \
+from mvn.utils.multiview import create_fundamental_matrix, find_rotation_matrices, compare_rotations, \
     evaluate_projection, evaluate_reconstruction, distance_between_projections, solve_four_solutions, \
     move_along_epipolar, triangulate_points_multiview_torch
 from mvn.utils.vis import draw_2d_pose_cv2, draw_images, draw_epipolar_lines, draw_cameras_and_pose
@@ -19,7 +19,7 @@ from mvn.utils.img import denormalize_image, image_batch_to_numpy
 
 
 SUBJECT_IDX = 9
-#IDXS = [3, 1]
+IDXS = [3, 1]
 
 
 DATA_ROOT = f'./results/S{SUBJECT_IDX}/'
@@ -269,7 +269,8 @@ if __name__ == '__main__':
                 
                 try:
                     t_rel = t_rel * scale
-                    R_initial, t2 = solve_four_solutions(point_corresponds, Ks[0], Rs[0], ts[0], (R_initial1[0], R_initial2[0]), t_rel[0])
+                    #R_initial, t2 = solve_four_solutions(point_corresponds, Ks[0], Rs[0], ts[0], (R_initial1[0], R_initial2[0]), t_rel[0])
+                    R_initial, t2 = solve_four_solutions(point_corresponds, Ks[0], Rs[0], ts[0], (R_initial1[0], R_initial2[0]), None)
                 except Exception as ex:
                     #print(ex)
                     # TODO: It's probably OK to just skip these samples.
