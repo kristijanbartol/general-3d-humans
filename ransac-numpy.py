@@ -4,12 +4,11 @@ from scipy.spatial.transform import Rotation as R
 
 from mvn.utils.multiview import find_rotation_matrices_numpy, \
     solve_four_solutions_numpy, distance_between_projections_numpy, \
-    evaluate_projection_numpy, evaluate_reconstruction_numpy, \
-    compare_rotations_numpy
+    evaluate_projection_numpy, evaluate_reconstruction_numpy
 
 
 SUBJECT_IDX = 9
-IDXS = [3, 1]
+IDXS = [2, 1]
 
 DATA_ROOT = f'./results/S{SUBJECT_IDX}/'
 
@@ -26,7 +25,7 @@ BBOX_PATH = os.path.join(DATA_ROOT, 'all_bboxes.npy')
 M = 50             # number of frames
 J = 17              # number of joints
 P = M * J           # total number of point correspondences    
-N = 200           # trials
+N = 2000           # trials
 eps = 0.75           # outlier probability
 S = 100              # sample size
 #I = (1 - eps) * P  # number of inliers condition
