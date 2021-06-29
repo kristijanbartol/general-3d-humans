@@ -1,3 +1,5 @@
+# Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py
+
 import torch
 import torch.nn.functional as F
 import numpy as np
