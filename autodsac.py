@@ -145,9 +145,6 @@ class AutoDSAC:
 
             # expectation of loss
             exp_loss = torch.sum(hyp_losses * hyp_scores)
-            avg_exp_loss = avg_exp_loss + exp_loss
+            avg_exp_loss += exp_loss
 
-            # loss of best hypothesis (for evaluation)
-            avg_top_loss = avg_top_loss + best_loss
-
-        return best_params, avg_exp_loss / num_frames, avg_top_loss / num_frames
+        return best_params, avg_exp_loss / num_frames, best_loss

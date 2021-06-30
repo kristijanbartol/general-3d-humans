@@ -1,102 +1,113 @@
-# Inspired by: https://github.com/vislearn/ngransac/blob/master/dataset.py.
-
 import numpy as np
 import torch
 import os
-import cv2
 import math
-import util
+import random
 
 from torch.utils.data import Dataset
 
+
+TRAIN_SIDXS = [1, 5, 6, 7, 8]
+TEST_SIDXS = [9, 11]
+SUBJECT_ORD_MAP = {
+        1:  0,
+        5:  1,
+        6:  2,
+        7:  3,
+        8:  4,
+        9:  5,
+        11: 6
+    }
+
+
 class SparseDataset(Dataset):
-	"""Sparse correspondences dataset."""
+    '''Temporary dataset class for Human3.6M dataset.'''
 
-	def __init__(self, folders, ratiothreshold, nfeatures, fmat=False, overwrite_side_info=False):
+    def __init__(self, rootdir, cam_idxs, num_subset_frames=30, num_iterations=1000):
+        '''The constructor loads and prepares predictions, GTs, and class parameters.
 
-		self.nfeatures = nfeatures # ensure fixed number of features, -1 keeps original feature count
-		self.ratiothreshold = ratiothreshold # threshold for Lowe's ratio filter
-		self.overwrite_side_info = overwrite_side_info # if true, provide no side information to the neural guidance network
-		
-		# collect precalculated correspondences of all provided datasets
-		self.files = []
-		for folder in folders:
-			self.files += [folder + f for f in os.listdir(folder)]
+        rootdir --- the directory where the predictions, camera params and GT are located
+        cam_idxs --- the subset of camera indexes used (for now, using 2 cameras)
+        num_subset_frames --- number of subset frames, M, used (which means P=M*J)
+        num_iterations --- number of iterations per epoch, i.e. length of the dataset
+        '''
+        # Initialize data for each subject.
+        self.Ks = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.Rs = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.ts = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.preds_2d = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.gt_3d = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.bboxes = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
 
-		self.fmat = fmat # estimate fundamental matrix instead of essential matrix
-		self.minset = 5 # minimal set size for essential matrices
-		if fmat: self.minset = 7 # minimal set size for fundamental matrices
-			
-	def __len__(self):
-		return len(self.files)
+        self.num_iterations = num_iterations
+        self.num_subset_frames = num_subset_frames
 
-	def __getitem__(self, idx):
+        # Collect precalculated correspondences, camera params and and 3D GT.
+        for dirname in os.listdir(rootdir):
+            sidx = int(dirname[1:])
+            Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs)
+            self.Ks[sidx] = Ks
+            self.Rs[sidx] = Rs
+            self.ts[sidx] = ts
 
-		# load precalculated correspondences
-		data = np.load(self.files[idx], allow_pickle=True)
+            pred_path = os.path.join(rootdir, 'all_2d_preds.npy')
+            gt_path = os.path.join(rootdir, 'all_3d_gt.npy')
+            bbox_path = os.path.join(rootdir, 'all_bboxes.npy')
 
-		# correspondence coordinates and matching ratios (side information)
-		pts1, pts2, ratios = data[0], data[1], data[2]
-		# image sizes
-		im_size1, im_size2 = torch.from_numpy(np.asarray(data[3])), torch.from_numpy(np.asarray(data[4]))
-		# image calibration parameters
-		K1, K2 = torch.from_numpy(data[5]), torch.from_numpy(data[6])
-		# ground truth pose
-		gt_R, gt_t = torch.from_numpy(data[7]), torch.from_numpy(data[8])
+            self.preds_2d[sidx] = np.load(pred_path, dtype=np.float32)[:, cam_idxs]
+            self.gt_3d[sidx] = np.load(gt_path, dtype=np.float32)
+            self.bboxes[sidx] = np.load(bbox_path, dtype=np.float32)[:, cam_idxs]
 
-		# applying Lowes ratio criterion
-		ratio_filter = ratios[0,:,0] < self.ratiothreshold
+            # Unbbox keypoints.
+            bbox_height = np.abs(self.bboxes[sidx][:, :, 0, 0] - self.bboxes[sidx][:, :, 1, 0])
+            self.preds_2d[sidx] *= np.expand_dims(
+                np.expand_dims(bbox_height / 384., axis=-1), axis=-1)
+            self.preds_2d[sidx] += np.expand_dims(self.bboxes[sidx][:, :, 0, :], axis=2)
 
-		if ratio_filter.sum() < self.minset: # ensure a minimum count of correspondences
-			print("WARNING! Ratio filter too strict. Only %d correspondences would be left, so I skip it." % int(ratio_filter.sum()))
-		else:
-			pts1 = pts1[:,ratio_filter,:]
-			pts2 = pts2[:,ratio_filter,:]
-			ratios = ratios[:,ratio_filter,:]
-		
-		if self.overwrite_side_info:
-			ratios = np.zeros(ratios.shape, dtype=np.float32)
+            # TODO: Obtain R_rel_gt, t_rel_gt, and scale.
 
-		if self.fmat:
-			# for fundamental matrices, normalize image coordinates using the image size (network should be independent to resolution)
-			util.normalize_pts(pts1, im_size1)
-			util.normalize_pts(pts2, im_size2)
-		else:
-			#for essential matrices, normalize image coordinate using the calibration parameters
-			pts1 = cv2.undistortPoints(pts1, K1.numpy(), None)
-			pts2 = cv2.undistortPoints(pts2, K2.numpy(), None)
+    @staticmethod
+    def __load_camera_params(subject_idx, cam_idxs):
+        '''Loading camera parameters that are prepared prior to learning.
 
-		# stack image coordinates and side information into one tensor
-		correspondences = np.concatenate((pts1, pts2, ratios), axis=2)
-		correspondences = np.transpose(correspondences)
-		correspondences = torch.from_numpy(correspondences)
+        Loads camera parameters for a given subject and subset cameras.
+        subject_idx --- subject index
+        cam_idxs --- subset of camera indexes (currently using 2 cameras)
+        '''
+        labels = np.load('/data/human36m/extra/human36m-multiview-labels-GTbboxes.npy', 
+            allow_pickle=True).item()
+        camera_params = labels['cameras'][SUBJECT_ORD_MAP[subject_idx]]
 
-		if self.nfeatures > 0:
-			# ensure that there are exactly nfeatures entries in the data tensor 
-			if correspondences.size(1) > self.nfeatures:
-				rnd = torch.randperm(correspondences.size(1))
-				correspondences = correspondences[:,rnd,:]
-				correspondences = correspondences[:,0:self.nfeatures]
+        Ks, Rs, ts = [], [], []
+        for cam_idx in cam_idxs:
+            Ks.append(camera_params[cam_idx][2])
+            Rs.append(camera_params[cam_idx][0])
+            ts.append(camera_params[cam_idx][1])
 
-			if correspondences.size(1) < self.nfeatures:
-				result = correspondences
-				for i in range(0, math.ceil(self.nfeatures / correspondences.size(1) - 1)):
-					rnd = torch.randperm(correspondences.size(1))
-					result = torch.cat((result, correspondences[:,rnd,:]), dim=1)
-				correspondences = result[:,0:self.nfeatures]
+        Ks = np.stack(Ks, axis=0)
+        Rs = np.stack(Rs, axis=0)
+        ts = np.stack(ts, axis=0)
 
-		# construct the ground truth essential matrix from the ground truth relative pose
-		gt_E = torch.zeros((3,3))
-		gt_E[0, 1] = -float(gt_t[2,0])
-		gt_E[0, 2] = float(gt_t[1,0])
-		gt_E[1, 0] = float(gt_t[2,0])
-		gt_E[1, 2] = -float(gt_t[0,0])
-		gt_E[2, 0] = -float(gt_t[1,0])
-		gt_E[2, 1] = float(gt_t[0,0])
+        return Ks, Rs, ts
 
-		gt_E = gt_E.mm(gt_R)
+    def __len__(self):
+        return self.num_iterations
 
-		# fundamental matrix from essential matrix
-		gt_F = K2.inverse().transpose(0, 1).mm(gt_E).mm(K1.inverse())
+    def __getitem__(self):
+        '''
+        Get random subset of point correspondences from the preset number of frames.
+        '''
+        rand_sidx = random.randint(0, len(TRAIN_SIDXS))
 
-		return correspondences, gt_F, gt_E, gt_R, gt_t, K1, K2, im_size1, im_size2
+        # Selecting a subset of frames.
+        selected_frames = np.random.choice(
+            np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_subset_frames)
+
+        selected_preds = self.preds_2d[rand_sidx][selected_frames]
+
+        # All points stacked along a single dimension for a single subject.
+        point_corresponds = np.concatenate(
+            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1)
+
+        return point_corresponds, self.gt_3d[rand_sidx], self.Ks[rand_sidx], \
+            self.Rs[rand_sidx], self.ts[rand_sidx]
