@@ -37,6 +37,7 @@ class AutoDSAC:
         self.device = device
 
         # Rotation and translation for the reference camera.
+        # TODO: Currently not using these reference rotation and translation.
         self.R_ref = torch.tensor([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]], 
             dtype=torch.float32, device=self.device)
         self.t_ref = torch.tensor([0., 0., 0.], dtype=torch.float32, device=self.device).transpose((0, 1))
@@ -45,7 +46,7 @@ class AutoDSAC:
         # TODO: Currently, working without scale (None) to learn rotations only.
         self.scale = scale
 
-    def __sample_hyp(self, point_corresponds, Ks) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __sample_hyp(self, point_corresponds, Ks, Rs, ts) -> Tuple[torch.Tensor, torch.Tensor]:
         '''
         Select a random subset of point correspondences and calculate R and t.
 
@@ -58,10 +59,10 @@ class AutoDSAC:
         R_est1, R_est2, t_rel, _ = find_rotation_matrices(
             point_corresponds[selected_idxs], None, Ks)
 
-        t_rel = t_rel * self.scale
+        #t_rel = t_rel * self.scale
         try:
-            R_est, t_rel = solve_four_solutions(
-                point_corresponds, Ks[0], self.R_ref, self.t_ref, (R_est1[0], R_est2[0]), t_rel)
+            R_est, _ = solve_four_solutions(
+                point_corresponds, Ks[0], Rs[0], ts[0], (R_est1[0], R_est2[0]), None)
         except Exception as ex:
             # In case none of the four solutions has all positive points.
             return None

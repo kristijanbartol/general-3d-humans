@@ -64,7 +64,7 @@ class SparseDataset(Dataset):
                 np.expand_dims(bbox_height / 384., axis=-1), axis=-1)
             self.preds_2d[sidx] += np.expand_dims(self.bboxes[sidx][:, :, 0, :], axis=2)
 
-            # TODO: Obtain R_rel_gt, t_rel_gt, and scale.
+            # TODO: Obtain GT scale.
 
     @staticmethod
     def __load_camera_params(subject_idx, cam_idxs):
