@@ -1,8 +1,10 @@
 # Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py
 
+from typing import Tuple
 import torch
 import torch.nn.functional as F
 import numpy as np
+import kornia
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections
@@ -13,10 +15,11 @@ class AutoDSAC:
     Differentiable RANSAC for camera autocalibration.
     '''
 
-    def __init__(self, hyps, inlier_thresh, inlier_beta, inlier_alpha, loss_function, scale, device='cuda'):
+    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, inlier_alpha, loss_function, scale=None, device='cuda'):
         '''
         Constructor.
-        hyps -- number of line hypotheses sampled for each image
+        hyps -- number of hypotheses (trials) for each AutoDSAC iteration
+        sample_size -- number of point correspondences to use for camera parameter estimation
         inlier_thresh -- threshold used in the soft inlier count, its measured in relative image size (1 = image width)
         inlier_beta -- scaling factor within the sigmoid of the soft inlier count
         inlier_alpha -- scaling factor for the soft inlier scores (controls the peakiness of the hypothesis distribution)
@@ -26,6 +29,7 @@ class AutoDSAC:
         '''
 
         self.hyps = hyps
+        self.sample_size = sample_size
         self.inlier_thresh = inlier_thresh
         self.inlier_beta = inlier_beta
         self.inlier_alpha = inlier_alpha
@@ -38,9 +42,10 @@ class AutoDSAC:
         self.t_ref = torch.tensor([0., 0., 0.], dtype=torch.float32, device=self.device).transpose((0, 1))
 
         # The scale is known.
+        # TODO: Currently, working without scale (None) to learn rotations only.
         self.scale = scale
 
-    def __sample_hyp(self, point_corresponds, Ks):
+    def __sample_hyp(self, point_corresponds, Ks) -> Tuple[torch.Tensor, torch.Tensor]:
         '''
         Select a random subset of point correspondences and calculate R and t.
 
@@ -83,7 +88,7 @@ class AutoDSAC:
 
         return score, line_dists
 
-    def __call__(self, point_corresponds, Ks, gt_3d):
+    def __call__(self, point_corresponds, Ks, Rs, ts):
         '''
         Perform robust, differentiable autocalibration.
 
@@ -94,56 +99,54 @@ class AutoDSAC:
                 M is the number of frames
                 2 is the number of views
                 2 is the number of coordinates (x, y)
-        labels -- ground truth labels for the set of frames, array of shape (MxJx3) where
+        gt_3d -- ground truth labels for the set of frames, array of shape (MxJx3) where
                 M is the number of frames
                 J is the number of joints
                 3 is the number of coordinates (x, y, z)
         '''
 
-        # working on CPU because of many, small matrices
+        # Working on CPU because of many small matrices.
         point_corresponds = point_corresponds.cpu()
 
-        num_frames = point_corresponds.size(0)
+        num_frames: int = point_corresponds.size(0)
 
-        avg_exp_loss = 0  # expected loss
-        avg_top_loss = 0  # loss of best hypothesis
-
-        hyp_losses = torch.zeros([self.hyps, 1])  # loss of each hypothesis
-        # score of each hypothesis
-        hyp_scores = torch.zeros([self.hyps, 1])
-
-        max_score = 0 	# score of best hypothesis
+        avg_exp_loss: float = 0                            # expected loss
+        hyp_losses = torch.zeros([self.hyps, 1])    # loss of each hypothesis
+        hyp_scores = torch.zeros([self.hyps, 1])    # score of each hypothesis
+        max_score = 0 	                            # score of best hypothesis
 
         for h in range(0, self.hyps):
 
-            # === step 1: sample hypothesis ===========================
+            # === Step 1: Sample hypothesis ===========================
             cam_params = self.__sample_hyp(point_corresponds, Ks)
             if cam_params is None:
                 continue  # skip invalid hyps
 
-            # === step 2: score hypothesis using soft inlier count ====
+            # === Step 2: Score hypothesis using soft inlier count ====
             score, _ = self.__soft_inlier_count(
                 point_corresponds, cam_params[0], cam_params[1], Ks)
 
-            # === step 3: calculate loss of hypothesis ================
-            loss = self.loss_function(cam_params, gt_3d)
+            # === Step 3: Calculate loss of hypothesis ================
+            # TODO: For now, GT is only rotation (QuaternionLoss).
+            R_rel_gt, _ = kornia.relative_camera_motion(Rs[0], ts[0], Rs[1], ts[1])
+            loss = self.loss_function(cam_params[0], R_rel_gt)
 
-            # store results
+            # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
 
-            # keep track of best hypothesis so far
+            # Keep track of best hypothesis so far.
             if score > max_score:
                 max_score = score
                 best_loss = loss
                 best_params = cam_params
 
-            # === step 4: calculate the expectation ===========================
+            # === Step 4: calculate the expectation ===========================
 
-            # softmax distribution from hypotheses scores
+            # Softmax distribution from hypotheses scores.
             hyp_scores = F.softmax(self.inlier_alpha * hyp_scores, 0)
 
-            # expectation of loss
+            # Loss expectation.
             exp_loss = torch.sum(hyp_losses * hyp_scores)
             avg_exp_loss += exp_loss
 

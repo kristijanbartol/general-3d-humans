@@ -23,12 +23,12 @@ SUBJECT_ORD_MAP = {
 class SparseDataset(Dataset):
     '''Temporary dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, cam_idxs, num_subset_frames=30, num_iterations=1000):
+    def __init__(self, rootdir, cam_idxs, num_frames=30, num_iterations=50000):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
         cam_idxs --- the subset of camera indexes used (for now, using 2 cameras)
-        num_subset_frames --- number of subset frames, M, used (which means P=M*J)
+        num_frames --- number of subset frames, M, used (which means P=M*J)
         num_iterations --- number of iterations per epoch, i.e. length of the dataset
         '''
         # Initialize data for each subject.
@@ -40,7 +40,7 @@ class SparseDataset(Dataset):
         self.bboxes = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
 
         self.num_iterations = num_iterations
-        self.num_subset_frames = num_subset_frames
+        self.num_frames = num_frames
 
         # Collect precalculated correspondences, camera params and and 3D GT.
         for dirname in os.listdir(rootdir):
@@ -101,7 +101,7 @@ class SparseDataset(Dataset):
 
         # Selecting a subset of frames.
         selected_frames = np.random.choice(
-            np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_subset_frames)
+            np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_frames)
 
         selected_preds = self.preds_2d[rand_sidx][selected_frames]
 
