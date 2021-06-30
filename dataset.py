@@ -19,6 +19,16 @@ SUBJECT_ORD_MAP = {
         11: 6
     }
 
+ORD_SUBJECT_MAP = {
+    0: 1,
+    1: 5,
+    2: 6,
+    3: 7,
+    4: 8,
+    5: 9,
+    6: 10
+}
+
 
 class SparseDataset(Dataset):
     '''Temporary dataset class for Human3.6M dataset.'''
@@ -50,13 +60,13 @@ class SparseDataset(Dataset):
             self.Rs[sidx] = Rs
             self.ts[sidx] = ts
 
-            pred_path = os.path.join(rootdir, 'all_2d_preds.npy')
-            gt_path = os.path.join(rootdir, 'all_3d_gt.npy')
-            bbox_path = os.path.join(rootdir, 'all_bboxes.npy')
+            pred_path = os.path.join(rootdir, dirname, 'all_2d_preds.npy')
+            gt_path = os.path.join(rootdir, dirname, 'all_3d_gt.npy')
+            bbox_path = os.path.join(rootdir, dirname, 'all_bboxes.npy')
 
-            self.preds_2d[sidx] = np.load(pred_path, dtype=np.float32)[:, cam_idxs]
-            self.gt_3d[sidx] = np.load(gt_path, dtype=np.float32)
-            self.bboxes[sidx] = np.load(bbox_path, dtype=np.float32)[:, cam_idxs]
+            self.preds_2d[sidx] = np.load(pred_path)[:, cam_idxs]
+            self.gt_3d[sidx] = np.load(gt_path)
+            self.bboxes[sidx] = np.load(bbox_path)[:, cam_idxs]
 
             # Unbbox keypoints.
             bbox_height = np.abs(self.bboxes[sidx][:, :, 0, 0] - self.bboxes[sidx][:, :, 1, 0])
@@ -93,21 +103,28 @@ class SparseDataset(Dataset):
     def __len__(self):
         return self.num_iterations
 
-    def __getitem__(self):
+    # NOTE: Not using idx, might not DataLoader.
+    def __getitem__(self, idx):
         '''
         Get random subset of point correspondences from the preset number of frames.
         '''
-        rand_sidx = random.randint(0, len(TRAIN_SIDXS))
+        rand_sidx = ORD_SUBJECT_MAP[random.randint(0, len(TRAIN_SIDXS))]
+        # TODO: At the moment, only have S9 keypoints.
+        rand_sidx = 9
 
         # Selecting a subset of frames.
         selected_frames = np.random.choice(
             np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_frames)
 
-        selected_preds = self.preds_2d[rand_sidx][selected_frames]
+        selected_preds = torch.from_numpy(self.preds_2d[rand_sidx][selected_frames])
+        selected_gt_3d = torch.from_numpy(self.gt_3d[rand_sidx][selected_frames])
+
+        Ks = torch.from_numpy(self.Ks[rand_sidx])
+        Rs = torch.from_numpy(self.Rs[rand_sidx])
+        ts = torch.from_numpy(self.ts[rand_sidx])
 
         # All points stacked along a single dimension for a single subject.
-        point_corresponds = np.concatenate(
-            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1)
+        point_corresponds = torch.from_numpy(np.concatenate(
+            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1))
 
-        return point_corresponds, self.gt_3d[rand_sidx], self.Ks[rand_sidx], \
-            self.Rs[rand_sidx], self.ts[rand_sidx]
+        return point_corresponds, selected_gt_3d, Ks, Rs, ts

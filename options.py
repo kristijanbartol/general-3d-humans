@@ -10,10 +10,11 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
-    parser.add_argument('--hypotheses', '-hyps', type=int, default=200,
+    #parser.add_argument('--hypotheses', '-hyps', type=int, default=200,
+    parser.add_argument('--hypotheses', '-hyps', type=int, default=10,
         help='number of sampled hypotheses in every autoDSAC iteration')
 
-    parser.add_argument('--sample_size', '-hyps', type=int, default=50,
+    parser.add_argument('--sample_size', '-ssize', type=int, default=50,
         help='number of point correspondences sampled to estimate camera parameters')
 
     parser.add_argument('--num_joints', '-jnt', type=int, default=17,
@@ -52,7 +53,6 @@ def parse_args():
 
     if len(opt.session) > 0:
         opt.session = '_' + opt.session
-    sid = 'rf%d_c%d_h%d_t%.2f%s' % (
-        opt.receptivefield, opt.capacity, opt.hypotheses, opt.inlierthreshold, opt.session)
+    sid = f'hyps{opt.hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
 
     return opt, sid

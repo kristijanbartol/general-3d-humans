@@ -248,7 +248,7 @@ def calc_reprojection_error_matrix(keypoints_3d, keypoints_2d_list, proj_matrici
     return np.vstack(reprojection_error_matrix).T
 
 
-def find_rotation_matrices(points, alg_confidences, Ks, device='cuda'):
+def find_rotation_matrices(points, Ks, device='cuda'):
     K1 = Ks[:, 0]
     K2 = Ks[:, 1]
 

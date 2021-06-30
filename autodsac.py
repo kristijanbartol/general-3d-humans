@@ -40,7 +40,7 @@ class AutoDSAC:
         # TODO: Currently not using these reference rotation and translation.
         self.R_ref = torch.tensor([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]], 
             dtype=torch.float32, device=self.device)
-        self.t_ref = torch.tensor([0., 0., 0.], dtype=torch.float32, device=self.device).transpose((0, 1))
+        self.t_ref = torch.tensor([[0., 0., 0.]], dtype=torch.float32, device=self.device).transpose(0, 1)
 
         # The scale is known.
         # TODO: Currently, working without scale (None) to learn rotations only.
@@ -54,10 +54,10 @@ class AutoDSAC:
         Ks --- 2x3x3, GT or estimated intrinsics for cam1 and cam2
         '''
         selected_idxs = torch.tensor(np.random.choice(
-            np.arange(point_corresponds.shape[0]), size=self.hyps), device='cuda')
+            np.arange(point_corresponds.shape[0]), size=self.sample_size), device=self.device)
 
         R_est1, R_est2, t_rel, _ = find_rotation_matrices(
-            point_corresponds[selected_idxs], None, Ks)
+            point_corresponds[selected_idxs], Ks)
 
         #t_rel = t_rel * self.scale
         try:
@@ -80,7 +80,7 @@ class AutoDSAC:
         # 3D line distances.
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], self.R_ref, R_est, self.t_ref, t_est)
+            Ks[0], self.R_ref, R_est, self.t_ref, t_est[0])
 
         # Soft inliers.
         line_dists = 1 - torch.sigmoid(self.inlier_beta *
@@ -107,7 +107,7 @@ class AutoDSAC:
         '''
 
         # Working on CPU because of many small matrices.
-        point_corresponds = point_corresponds.cpu()
+        #point_corresponds = point_corresponds.cpu()
 
         num_frames: int = point_corresponds.size(0)
 
@@ -119,7 +119,7 @@ class AutoDSAC:
         for h in range(0, self.hyps):
 
             # === Step 1: Sample hypothesis ===========================
-            cam_params = self.__sample_hyp(point_corresponds, Ks)
+            cam_params = self.__sample_hyp(point_corresponds, Ks, Rs, ts)
             if cam_params is None:
                 continue  # skip invalid hyps
 
@@ -129,7 +129,7 @@ class AutoDSAC:
 
             # === Step 3: Calculate loss of hypothesis ================
             # TODO: For now, GT is only rotation (QuaternionLoss).
-            R_rel_gt, _ = kornia.relative_camera_motion(Rs[0], ts[0], Rs[1], ts[1])
+            R_rel_gt, _ = kornia.relative_camera_motion(Rs[:, 0], ts[:, 0], Rs[:, 1], ts[:, 1])
             loss = self.loss_function(cam_params[0], R_rel_gt)
 
             # Store results.
