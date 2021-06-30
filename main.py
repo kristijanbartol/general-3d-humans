@@ -1,4 +1,3 @@
-from enum import auto
 import torch
 import torch.optim as optim
 import torchvision.utils as vutils
@@ -17,19 +16,29 @@ from options import parse_args
 
 
 if __name__ == '__main__':
+    # Parse command line args.
     opt = parse_args()
 
+    # Create dataset, loss, model and AutoDSAC objects.
     train_set = SparseDataset()
     loss = QuaternionLoss()
     score_nn = create_score_nn()
     auto_dsac = AutoDSAC()
 
+    # Set ScoreNN for optimization (training).
+    score_nn.train()
+    opt_score_nn = optim.Adam(score_nn.parameters(), lr=opt.learningrate)
+    lrs_score_nn = optim.lr_scheduler.StepLR(opt_score_nn, opt.lrstep, gamma=0.5)
+
+    # Create torch data loader.
     dataloader = DataLoader(train_set, shuffle=False,
                             num_workers=4, batch_size=1)
 
     # Train loop.
     for iteration, (point_corresponds, gt_3d, Ks, gt_Rs, gt_ts) in enumerate(dataloader):
         start_time = time.time()
+
+        # Call AutoDSAC to obtain camera params and the ScoreNN loss expectation.
         camera_params, avg_exp_loss, best_loss = auto_dsac(
             point_corresponds, Ks, gt_3d)
 
