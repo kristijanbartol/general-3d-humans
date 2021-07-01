@@ -101,11 +101,14 @@ class AutoDSAC:
         Rs -- GT rotations for the first and second camera
         ts -- GT translation for the first and second camera
         '''
+        #line_dists = distance_between_projections(
+        #    point_corresponds[:, 0], point_corresponds[:, 1], 
+        #    Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
+            Ks[0], Rs[0, 0], R_est, ts[0, 0], ts[0, 1], device=self.device)
 
-        return self.score_nn(line_dists.cuda())
+        return self.score_nn(line_dists.cuda()), line_dists.mean()
 
     def __call__(self, point_corresponds, Ks, Rs, ts):
         '''
@@ -131,9 +134,23 @@ class AutoDSAC:
             Rs = Rs.cpu()
             ts = ts.cpu()
 
-        hyp_losses = torch.zeros([self.hyps, 1], device=self.device)    # loss of each hypothesis
-        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)    # score of each hypothesis
-        max_score = 0 	                            # score of best hypothesis
+        hyp_line_dists = torch.zeros([self.hyps, 1], device=self.device)    # line dists of each hypothesis
+        hyp_losses = torch.zeros([self.hyps, 1], device=self.device)        # loss of each hypothesis
+        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)        # score of each hypothesis
+
+        best_loss_loss = 1000           # this one is a reference
+        best_loss_score = 0
+        best_loss_line_dist = 0
+
+        best_score_loss = 0
+        best_score_score = 0            # this one is a reference
+        best_score_line_dist = 0
+
+        best_line_dist_loss = 0
+        best_line_dist_score = 0
+        best_line_dist_dist = 10000     # this one is a reference
+
+        selected_params = None
 
         for h in range(0, self.hyps):
 
@@ -145,7 +162,8 @@ class AutoDSAC:
             # === Step 2: Score hypothesis using soft inlier count ====
             #score, _ = self.__soft_inlier_count(
             #    point_corresponds, cam_params[0], cam_params[1], Ks)
-            score = self.__score_nn(point_corresponds, cam_params[0], cam_params[1], Ks, Rs, ts)
+            score, line_dist = self.__score_nn(
+                point_corresponds, cam_params[0], cam_params[1], Ks, Rs, ts)
 
             # === Step 3: Calculate loss of hypothesis ================
             # TODO: For now, GT is only rotation (QuaternionLoss).
@@ -155,12 +173,32 @@ class AutoDSAC:
             # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
+            hyp_line_dists[h] = line_dist
 
-            # Keep track of best hypothesis so far.
-            if score > max_score:
-                max_score = score
-                best_loss = loss
-                best_params = cam_params
+            #print(f'{h}. {loss.item():.4f} {score.item():.4f} {line_dist.item():.4f}')
+
+            # Keep track of best hypotheses with respect to loss, score and line dists.
+            if loss < best_loss_loss:
+                best_loss_loss = loss
+                best_loss_score = score
+                best_loss_line_dist = line_dist
+
+            if score > best_score_score:
+                best_score_loss = loss
+                best_score_score = score
+                best_score_line_dist = line_dist
+                selected_params = cam_params
+
+            if line_dist < best_line_dist_dist:
+                best_line_dist_loss = loss
+                best_line_dist_score = score
+                best_line_dist_dist = line_dist
+
+        best_loss = (best_loss_loss, best_loss_score, best_loss_line_dist)
+        best_score = (best_score_loss, best_score_score, best_score_line_dist)
+        best_line_dist = (best_line_dist_loss, best_line_dist_score, best_line_dist_dist)
+
+        # TODO: Calculate correlations
 
         # === Step 4: calculate the expectation ===========================
 
@@ -170,4 +208,4 @@ class AutoDSAC:
         # Loss expectation.
         exp_loss = torch.sum(hyp_losses * hyp_scores)
 
-        return best_params, exp_loss, best_loss
+        return exp_loss, selected_params, best_loss, best_score, best_line_dist

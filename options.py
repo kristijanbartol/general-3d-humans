@@ -19,7 +19,7 @@ def parse_args():
     parser.add_argument('--num_joints', '-jnt', type=int, default=17,
         help='number of joints in human skeleton detector')
 
-    parser.add_argument('--num_frames', type=int, default=30,
+    parser.add_argument('--num_frames', type=int, default=50,
         help='number of frames used for camera autocalibration in each iteration')
 
     parser.add_argument('--num_iterations', '-ti', type=int, default=50000,
@@ -46,6 +46,8 @@ def parse_args():
         help='store network weights and a prediction vizualisation every x training iterations')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
+
+    parser.add_argument('--debug', dest='debug', action='store_true')
 
     parser.add_argument('--session', '-sid', default='',
         help='custom session name appended to output files. Useful to separate different runs of the program')

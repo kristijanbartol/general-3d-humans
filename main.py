@@ -33,7 +33,7 @@ if __name__ == '__main__':
         filter(lambda p: p.requires_grad, score_nn.parameters()), lr=opt.learning_rate)
     lrs_score_nn = optim.lr_scheduler.StepLR(opt_score_nn, opt.lr_step, gamma=0.5)
 
-    torch.autograd.set_detect_anomaly(True)
+    if opt.debug: torch.autograd.set_detect_anomaly(True)
 
     # Create AutoDSAC.
     auto_dsac = AutoDSAC(opt.hypotheses, opt.sample_size, opt.inlier_threshold, 
@@ -50,17 +50,21 @@ if __name__ == '__main__':
         point_corresponds, _, gt_Ks, gt_Rs, gt_ts = [x.cuda() for x in batch_items]
 
         # Call AutoDSAC to obtain camera params and the expected ScoreNN loss.
-        camera_params, exp_loss, best_loss = auto_dsac(
-            point_corresponds[0], gt_Ks, gt_Rs, gt_ts)
+        exp_loss, camera_params, best_per_loss, best_per_score, best_per_line_dist = \
+            auto_dsac(point_corresponds[0], gt_Ks, gt_Rs, gt_ts)
 
-        exp_loss.backward()		# calculate gradients (pytorch autograd)
+        exp_loss.backward()		        # calculate gradients (pytorch autograd)
         opt_score_nn.step()			    # update parameters
         opt_score_nn.zero_grad()	    # reset gradient buffer
 
         end_time = time.time() - start_time
 
-        print(f'Iteration: {iteration:6d}, Expected Loss: {exp_loss:.4f}, '
-            f'Best Loss: {best_loss:.4f}, Time: {end_time:.2f}s', flush=True)
-        train_log.write(f'{iteration} {exp_loss} {best_loss}\n')
+        print(f'Iteration: {iteration}, Expected Loss: {exp_loss.item():.4f} \n'
+            f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f}, {best_per_loss[2].item():.4f}) \n' 
+            f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}, {best_per_score[2].item():.4f}) \n'
+            f'\tBest (per) Line Dist: ({best_per_line_dist[0].item():.4f}, {best_per_line_dist[1].item():.4f}, {best_per_line_dist[2].item():.4f})', 
+            flush=True
+        )
+        #train_log.write(f'{iteration} {exp_loss} {top_loss}\n')
 
     train_log.close()
