@@ -10,8 +10,7 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
-    #parser.add_argument('--hypotheses', '-hyps', type=int, default=200,
-    parser.add_argument('--hypotheses', '-hyps', type=int, default=10,
+    parser.add_argument('--hypotheses', '-hyps', type=int, default=200,
         help='number of sampled hypotheses in every autoDSAC iteration')
 
     parser.add_argument('--sample_size', '-ssize', type=int, default=50,
@@ -45,6 +44,8 @@ def parse_args():
 
     parser.add_argument('--storeinterval', '-si', type=int, default=1000,
         help='store network weights and a prediction vizualisation every x training iterations')
+
+    parser.add_argument('--cpu', dest='cpu', action='store_true')
 
     parser.add_argument('--session', '-sid', default='',
         help='custom session name appended to output files. Useful to separate different runs of the program')

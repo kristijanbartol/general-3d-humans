@@ -15,7 +15,8 @@ class AutoDSAC:
     Differentiable RANSAC for camera autocalibration.
     '''
 
-    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, inlier_alpha, loss_function, scale=None, device='cuda'):
+    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, inlier_alpha, score_nn, 
+            loss_function, scale=None, device='cpu'):
         '''
         Constructor.
         hyps -- number of hypotheses (trials) for each AutoDSAC iteration
@@ -33,6 +34,7 @@ class AutoDSAC:
         self.inlier_thresh = inlier_thresh
         self.inlier_beta = inlier_beta
         self.inlier_alpha = inlier_alpha
+        self.score_nn = score_nn
         self.loss_function = loss_function
         self.device = device
 
@@ -57,7 +59,7 @@ class AutoDSAC:
             np.arange(point_corresponds.shape[0]), size=self.sample_size), device=self.device)
 
         R_est1, R_est2, t_rel, _ = find_rotation_matrices(
-            point_corresponds[selected_idxs], Ks)
+            point_corresponds[selected_idxs], Ks, device=self.device)
 
         #t_rel = t_rel * self.scale
         try:
@@ -80,7 +82,7 @@ class AutoDSAC:
         # 3D line distances.
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], self.R_ref, R_est, self.t_ref, t_est[0])
+            Ks[0], self.R_ref, R_est, self.t_ref, t_est[0], device=self.device)
 
         # Soft inliers.
         line_dists = 1 - torch.sigmoid(self.inlier_beta *
@@ -88,6 +90,22 @@ class AutoDSAC:
         score = torch.sum(line_dists)
 
         return score, line_dists
+
+    def __score_nn(self, point_corresponds, R_est, t_est, Ks, Rs, ts):
+        '''
+        Feed 3D line distances into ScoreNN to obtain score for the hyp.
+
+        point_corresponds -- Px2x2
+        R_est -- 3x3, estimated relative rotation
+        t_est -- 3x1, estimated relative translation
+        Rs -- GT rotations for the first and second camera
+        ts -- GT translation for the first and second camera
+        '''
+        line_dists = distance_between_projections(
+            point_corresponds[:, 0], point_corresponds[:, 1], 
+            Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
+
+        return self.score_nn(line_dists.cuda())
 
     def __call__(self, point_corresponds, Ks, Rs, ts):
         '''
@@ -107,13 +125,14 @@ class AutoDSAC:
         '''
 
         # Working on CPU because of many small matrices.
-        #point_corresponds = point_corresponds.cpu()
+        if self.device == 'cpu': 
+            point_corresponds = point_corresponds.cpu()
+            Ks = Ks.cpu()
+            Rs = Rs.cpu()
+            ts = ts.cpu()
 
-        num_frames: int = point_corresponds.size(0)
-
-        avg_exp_loss: float = 0                            # expected loss
-        hyp_losses = torch.zeros([self.hyps, 1])    # loss of each hypothesis
-        hyp_scores = torch.zeros([self.hyps, 1])    # score of each hypothesis
+        hyp_losses = torch.zeros([self.hyps, 1], device=self.device)    # loss of each hypothesis
+        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)    # score of each hypothesis
         max_score = 0 	                            # score of best hypothesis
 
         for h in range(0, self.hyps):
@@ -124,8 +143,9 @@ class AutoDSAC:
                 continue  # skip invalid hyps
 
             # === Step 2: Score hypothesis using soft inlier count ====
-            score, _ = self.__soft_inlier_count(
-                point_corresponds, cam_params[0], cam_params[1], Ks)
+            #score, _ = self.__soft_inlier_count(
+            #    point_corresponds, cam_params[0], cam_params[1], Ks)
+            score = self.__score_nn(point_corresponds, cam_params[0], cam_params[1], Ks, Rs, ts)
 
             # === Step 3: Calculate loss of hypothesis ================
             # TODO: For now, GT is only rotation (QuaternionLoss).
@@ -142,13 +162,12 @@ class AutoDSAC:
                 best_loss = loss
                 best_params = cam_params
 
-            # === Step 4: calculate the expectation ===========================
+        # === Step 4: calculate the expectation ===========================
 
-            # Softmax distribution from hypotheses scores.
-            hyp_scores = F.softmax(self.inlier_alpha * hyp_scores, 0)
+        # Softmax distribution from hypotheses scores.
+        hyp_scores = F.softmax(self.inlier_alpha * hyp_scores, 0)
 
-            # Loss expectation.
-            exp_loss = torch.sum(hyp_losses * hyp_scores)
-            avg_exp_loss += exp_loss
+        # Loss expectation.
+        exp_loss = torch.sum(hyp_losses * hyp_scores)
 
-        return best_params, avg_exp_loss / num_frames, best_loss
+        return best_params, exp_loss, best_loss
