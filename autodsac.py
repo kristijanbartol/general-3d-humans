@@ -8,6 +8,7 @@ import kornia
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections
+from loss import cross_entropy_loss
 
 
 class AutoDSAC:
@@ -108,9 +109,14 @@ class AutoDSAC:
             point_corresponds[:, 0], point_corresponds[:, 1], 
             Ks[0], Rs[0, 0], R_est, ts[0, 0], ts[0, 1], device=self.device)
 
+        # Normalize and invert line distance values for NN.
+        #model_input = line_dists / line_dists.max()
+        #model_input = 1 - model_input
+
+        #return 1 - self.score_nn(line_dists.cuda()), line_dists.mean()
         return self.score_nn(line_dists.cuda()), line_dists.mean()
 
-    def __call__(self, point_corresponds, Ks, Rs, ts):
+    def __call__(self, point_corresponds, Ks, Rs, ts, points_3d):
         '''
         Perform robust, differentiable autocalibration.
 
@@ -133,6 +139,7 @@ class AutoDSAC:
             Ks = Ks.cpu()
             Rs = Rs.cpu()
             ts = ts.cpu()
+            points_3d = points_3d.cpu()
 
         hyp_line_dists = torch.zeros([self.hyps, 1], device=self.device)    # line dists of each hypothesis
         hyp_losses = torch.zeros([self.hyps, 1], device=self.device)        # loss of each hypothesis
@@ -166,16 +173,14 @@ class AutoDSAC:
                 point_corresponds, cam_params[0], cam_params[1], Ks, Rs, ts)
 
             # === Step 3: Calculate loss of hypothesis ================
-            # TODO: For now, GT is only rotation (QuaternionLoss).
-            R_rel_gt, _ = kornia.relative_camera_motion(Rs[:, 0], ts[:, 0], Rs[:, 1], ts[:, 1])
-            loss = self.loss_function(cam_params[0], R_rel_gt)
+            loss = self.loss_function(cam_params[0], Ks, Rs, ts, points_3d)
 
             # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
             hyp_line_dists[h] = line_dist
 
-            #print(f'{h}. {loss.item():.4f} {score.item():.4f} {line_dist.item():.4f}')
+            #print(f'{h}. {loss.item():3.4f} \t{score.item():3.4f} \t{line_dist.item():3.4f}')
 
             # Keep track of best hypotheses with respect to loss, score and line dists.
             if loss < best_loss_loss:
@@ -203,9 +208,15 @@ class AutoDSAC:
         # === Step 4: calculate the expectation ===========================
 
         # Softmax distribution from hypotheses scores.
-        hyp_scores = F.softmax(self.inlier_alpha * hyp_scores, 0)
+        #hyp_scores_softmax = F.softmax(self.inlier_alpha * hyp_scores)
+        hyp_scores_softmax = F.softmax(hyp_scores, dim=0)
 
         # Loss expectation.
-        exp_loss = torch.sum(hyp_losses * hyp_scores)
+        hyp_losses /= hyp_losses.max()
+        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
+        #exp_loss = -torch.sum(hyp_losses * torch.log(hyp_scores_softmax))
+
+        # Categorical cross-entropy loss.
+        cross_entropy = cross_entropy_loss(hyp_scores_softmax, hyp_losses)
 
         return exp_loss, selected_params, best_loss, best_score, best_line_dist

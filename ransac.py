@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
             inliers = torch.stack((kpts1_gt, kpts2_gt), dim=1)[condition]
             try:
-                R_gt1, R_gt2, t_rel, F = find_rotation_matrices(inliers, None, Ks)
+                R_gt1, R_gt2, t_rel, F = find_rotation_matrices(inliers, Ks)
             except Exception as ex:
                 print(f'[GT data + GT camera params] {ex}')
 
@@ -185,7 +185,7 @@ if __name__ == '__main__':
 
             inliers = point_corresponds[condition]
             try:
-                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(inliers, None, Ks)
+                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(inliers, Ks)
             except Exception as ex:
                 print(f'[GT camera params] {ex}')
 
@@ -225,7 +225,7 @@ if __name__ == '__main__':
             #assert(num_inliers == point_corresponds.shape[0])
 
             try:
-                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(kpts_2d_projs, None, Ks)
+                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(kpts_2d_projs, Ks)
             except Exception as ex:
                 print(f'[Autocalibration using triangulated points (GT)] {ex}')
 
@@ -265,7 +265,7 @@ if __name__ == '__main__':
 
                 selected_idxs = torch.tensor(np.random.choice(np.arange(point_corresponds.shape[0]), size=S), device='cuda')
 
-                R_initial1, R_initial2, t_rel, _ = find_rotation_matrices(point_corresponds[selected_idxs], None, Ks)
+                R_initial1, R_initial2, t_rel, _ = find_rotation_matrices(point_corresponds[selected_idxs], Ks)
                 
                 try:
                     t_rel = t_rel * scale

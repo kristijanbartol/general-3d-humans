@@ -443,6 +443,7 @@ def find_camera_parameters(x1, x2, x3, K1, K2, K3):
     return R_sol1, R_sol2, H21[0, :3, :3]
 
 
+# TODO: Improve parameter ordering and return parameters.
 def evaluate_projection(kpts_3d_gt, Ks, Rs, t1, t2, R_rel_est, device='cuda'):
     K1 = Ks[0]
     K2 = Ks[1]
@@ -512,6 +513,7 @@ def evaluate_projection_numpy(kpts_3d_gt, Ks, Rs, ts, R_rel_est, t_rel_est):
     return np.stack((kpts_2d_gt1, kpts_2d_gt2), axis=0), error_2d
 
 
+# TODO: Improve parameter ordering and return parameters.
 def evaluate_reconstruction(kpts_3d_gt, kpts_2d, Ks, Rs, t1, t2, R_rel_est):
     K1 = Ks[0]
     K2 = Ks[1]

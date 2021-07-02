@@ -25,7 +25,7 @@ BBOX_PATH = os.path.join(DATA_ROOT, 'all_bboxes.npy')
 M = 50             # number of frames
 J = 17              # number of joints
 P = M * J           # total number of point correspondences    
-N = 2000           # trials
+N = 200           # trials
 eps = 0.75           # outlier probability
 S = 100              # sample size
 #I = (1 - eps) * P  # number of inliers condition
@@ -155,6 +155,6 @@ if __name__ == '__main__':
         quat_norm = np.linalg.norm(R_rel_gt_quat - R_est_quat, ord=1)
 
         print(f'{counter}. ({num_inliers}, {line_dists.mean():.3f}) -> '
-            f'{quat_norm:.2f} {error_2d:.2f}, {error_3d:.2f}')
+            f'{quat_norm:.4f} {error_2d:.2f}, {error_3d:.2f}')
 
         counter += 1

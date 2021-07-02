@@ -6,7 +6,7 @@ import time
 
 from autodsac import AutoDSAC
 from dataset import SparseDataset
-from loss import QuaternionLoss
+from loss import QuaternionLoss, ReprojectionLoss3D
 from models import create_score_nn
 from options import parse_args
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     # Create dataset, loss and model.
     train_set = SparseDataset(opt.rootdir, CAM_IDXS, opt.num_frames, opt.num_iterations)
-    loss = QuaternionLoss()
+    loss = ReprojectionLoss3D()
     score_nn = create_score_nn(input_size=opt.num_frames*opt.num_joints)
 
     # Set ScoreNN for optimization (training).
@@ -47,11 +47,12 @@ if __name__ == '__main__':
     for iteration, batch_items in enumerate(dataloader):
         start_time = time.time()
 
-        point_corresponds, _, gt_Ks, gt_Rs, gt_ts = [x.cuda() for x in batch_items]
+        # NOTE: GT 3D used only as any other random points for reprojection loss, for now.
+        point_corresponds, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cuda() for x in batch_items]
 
         # Call AutoDSAC to obtain camera params and the expected ScoreNN loss.
         exp_loss, camera_params, best_per_loss, best_per_score, best_per_line_dist = \
-            auto_dsac(point_corresponds[0], gt_Ks, gt_Rs, gt_ts)
+            auto_dsac(point_corresponds[0], gt_Ks, gt_Rs, gt_ts, gt_3d[0])
 
         exp_loss.backward()		        # calculate gradients (pytorch autograd)
         opt_score_nn.step()			    # update parameters
@@ -59,7 +60,7 @@ if __name__ == '__main__':
 
         end_time = time.time() - start_time
 
-        print(f'Iteration: {iteration}, Expected Loss: {exp_loss.item():.4f} \n'
+        print(f'Iteration: {iteration}, Expected Loss: {exp_loss.item():.4f} ({end_time:.2f}s)\n'
             f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f}, {best_per_loss[2].item():.4f}) \n' 
             f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}, {best_per_score[2].item():.4f}) \n'
             f'\tBest (per) Line Dist: ({best_per_line_dist[0].item():.4f}, {best_per_line_dist[1].item():.4f}, {best_per_line_dist[2].item():.4f})', 
