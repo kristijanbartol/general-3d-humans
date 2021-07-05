@@ -109,6 +109,14 @@ class SparseDataset(Dataset):
     def __getitem__(self, idx):
         '''
         Get random subset of point correspondences from the preset number of frames.
+
+        Return:
+        -------
+        batch_point_corresponds -- [(C-1)xPx2x2]
+        selected_gt_3d -- [FxJx3]
+        batch_Ks -- [Cx2x3x3]
+        batch_Rs -- [Cx2x3x3]
+        batch_ts -- [Cx2x3x1]
         '''
         rand_sidx = ORD_SUBJECT_MAP[random.randint(0, len(TRAIN_SIDXS))]
         # TODO: At the moment, only have S9 keypoints.
@@ -149,9 +157,11 @@ class SparseDataset(Dataset):
             batch_ts.append(np.stack([ts[0], ts[cam_idx + 1]], axis=0))
 
         batch_point_corresponds = torch.from_numpy(np.array(batch_point_corresponds))
+        selected_preds = torch.from_numpy(selected_preds) 
         selected_gt_3d = torch.from_numpy(selected_gt_3d)
         batch_Ks = torch.from_numpy(np.array(batch_Ks))
         batch_Rs = torch.from_numpy(np.array(batch_Rs))
         batch_ts = torch.from_numpy(np.array(batch_ts))
 
-        return batch_point_corresponds, selected_gt_3d, batch_Ks, batch_Rs, batch_ts
+        return batch_point_corresponds, selected_preds, selected_gt_3d, \
+            batch_Ks, batch_Rs, batch_ts

@@ -10,8 +10,11 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
-    parser.add_argument('--hypotheses', '-hyps', type=int, default=200,
-        help='number of sampled hypotheses in every autoDSAC iteration')
+    parser.add_argument('--camera_hypotheses', '-chyps', type=int, default=200,
+        help='number of sampled hypotheses in every cameraDSAC iteration')
+
+    parser.add_argument('--pose_hypotheses', '-phyps', type=int, default=200,
+        help='number of sampled hypotheses in every poseDSAC iteration')
 
     parser.add_argument('--sample_size', '-ssize', type=int, default=50,
         help='number of point correspondences sampled to estimate camera parameters')
@@ -45,6 +48,8 @@ def parse_args():
     parser.add_argument('--storeinterval', '-si', type=int, default=1000,
         help='store network weights and a prediction vizualisation every x training iterations')
 
+    parser.add_argument('--use_gt_cameras', dest='use_gt_cameras', action='store_true')
+
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 
     parser.add_argument('--debug', dest='debug', action='store_true')
@@ -56,6 +61,6 @@ def parse_args():
 
     if len(opt.session) > 0:
         opt.session = '_' + opt.session
-    sid = f'hyps{opt.hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
+    sid = f'chyps{opt.camera_hypotheses}_cphyps{opt.pose_hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
 
     return opt, sid

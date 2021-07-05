@@ -4,6 +4,10 @@ import kornia
 from mvn.utils.multiview import evaluate_projection, evaluate_reconstruction
 
 
+def cross_entropy_loss(est, gt):
+    return -torch.log(torch.exp(est[gt.argmax()]) / torch.sum(torch.exp(est)))
+
+
 class QuaternionLoss:
     '''
     Calculate loss based on the difference between the rotations (in quaternions).
@@ -45,7 +49,3 @@ class ReprojectionLoss3D:
             points_3d, kpts_2d_projs, gt_Ks, gt_Rs, gt_ts[0], gt_ts[1], R_est)
 
         return error_3d
-
-
-def cross_entropy_loss(est, gt):
-    return -torch.log(torch.exp(est[gt.argmax()]) / torch.sum(torch.exp(est)))
