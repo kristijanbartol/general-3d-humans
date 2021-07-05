@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import kornia
+import copy
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections
@@ -56,8 +57,10 @@ class AutoDSAC:
         point_corresponds --- Px2x2 (P=M*J)
         Ks --- 2x3x3, GT or estimated intrinsics for cam1 and cam2
         '''
-        selected_idxs = torch.tensor(np.random.choice(
-            np.arange(point_corresponds.shape[0]), size=self.sample_size), device=self.device)
+        #selected_idxs = torch.tensor(np.random.choice(
+        #    np.arange(point_corresponds.shape[0]), size=self.sample_size), device=self.device)
+        selected_idxs = np.random.choice(
+            np.arange(point_corresponds.shape[0]), size=self.sample_size)
 
         R_est1, R_est2, t_rel, _ = find_rotation_matrices(
             point_corresponds[selected_idxs], Ks, device=self.device)
@@ -65,7 +68,7 @@ class AutoDSAC:
         #t_rel = t_rel * self.scale
         try:
             R_est, _ = solve_four_solutions(
-                point_corresponds, Ks[0], Rs[0], ts[0], (R_est1[0], R_est2[0]), None)
+                point_corresponds, Ks, Rs, ts, (R_est1[0], R_est2[0]), None)
         except Exception as ex:
             # In case none of the four solutions has all positive points.
             return None
@@ -83,7 +86,7 @@ class AutoDSAC:
         # 3D line distances.
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], self.R_ref, R_est, self.t_ref, t_est[0], device=self.device)
+            Ks, self.R_ref, R_est, self.t_ref, t_est[0], device=self.device)
 
         # Soft inliers.
         line_dists = 1 - torch.sigmoid(self.inlier_beta *
@@ -107,7 +110,7 @@ class AutoDSAC:
         #    Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks[0], Rs[0, 0], R_est, ts[0, 0], ts[0, 1], device=self.device)
+            Ks, Rs[0], R_est, ts[0], ts[1], device=self.device)
 
         # Normalize and invert line distance values for NN.
         #model_input = line_dists / line_dists.max()
@@ -132,15 +135,6 @@ class AutoDSAC:
                 J is the number of joints
                 3 is the number of coordinates (x, y, z)
         '''
-
-        # Working on CPU because of many small matrices.
-        if self.device == 'cpu': 
-            point_corresponds = point_corresponds.cpu()
-            Ks = Ks.cpu()
-            Rs = Rs.cpu()
-            ts = ts.cpu()
-            points_3d = points_3d.cpu()
-
         hyp_line_dists = torch.zeros([self.hyps, 1], device=self.device)    # line dists of each hypothesis
         hyp_losses = torch.zeros([self.hyps, 1], device=self.device)        # loss of each hypothesis
         hyp_scores = torch.zeros([self.hyps, 1], device=self.device)        # score of each hypothesis
@@ -183,6 +177,7 @@ class AutoDSAC:
             #print(f'{h}. {loss.item():3.4f} \t{score.item():3.4f} \t{line_dist.item():3.4f}')
 
             # Keep track of best hypotheses with respect to loss, score and line dists.
+            # TODO: Simplify this by taking argmax for each reference variable.
             if loss < best_loss_loss:
                 best_loss_loss = loss
                 best_loss_score = score
@@ -213,10 +208,12 @@ class AutoDSAC:
 
         # Loss expectation.
         hyp_losses /= hyp_losses.max()
-        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
-        #exp_loss = -torch.sum(hyp_losses * torch.log(hyp_scores_softmax))
+        softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
+
+        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax) + 0.6 * softmax_entropy #* 2 * (0.3 / 5.3)
+        #exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
 
         # Categorical cross-entropy loss.
         cross_entropy = cross_entropy_loss(hyp_scores_softmax, hyp_losses)
 
-        return exp_loss, selected_params, best_loss, best_score, best_line_dist
+        return exp_loss, softmax_entropy, selected_params, best_loss, best_score, best_line_dist

@@ -40,9 +40,9 @@ class ReprojectionLoss3D:
         '''
         # TODO: Evaluating only rotation for now.
         kpts_2d_projs, _ = evaluate_projection(
-            points_3d, gt_Ks[0], gt_Rs[0], gt_ts[0][0], gt_ts[0][1], R_est, device=self.device)
+            points_3d, gt_Ks, gt_Rs, gt_ts[0], gt_ts[1], R_est, device=self.device)
         error_3d, _ = evaluate_reconstruction(
-            points_3d, kpts_2d_projs, gt_Ks[0], gt_Rs[0], gt_ts[0][0], gt_ts[0][1], R_est)
+            points_3d, kpts_2d_projs, gt_Ks, gt_Rs, gt_ts[0], gt_ts[1], R_est)
 
         return error_3d
 

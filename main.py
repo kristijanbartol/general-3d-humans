@@ -11,7 +11,8 @@ from models import create_score_nn
 from options import parse_args
 
 
-CAM_IDXS = [3, 1]
+#CAM_IDXS = [3, 1]
+CAM_IDXS = [0, 1, 2, 3]
 
 
 if __name__ == '__main__':
@@ -40,19 +41,22 @@ if __name__ == '__main__':
         opt.inlier_beta, opt.inlier_alpha, score_nn, loss)
 
     # Create torch data loader.
-    dataloader = DataLoader(train_set, shuffle=False,
-                            num_workers=4, batch_size=1)
+    sparse_dataloader = DataLoader(train_set, shuffle=False,
+                            num_workers=4, batch_size=None)
 
     # Train loop.
-    for iteration, batch_items in enumerate(dataloader):
+    for iteration, batch_items in enumerate(sparse_dataloader):
         start_time = time.time()
 
-        # NOTE: GT 3D used only as any other random points for reprojection loss, for now.
-        point_corresponds, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cuda() for x in batch_items]
+        # Compute AutoDSAC on CPU for efficiency.
+        point_corresponds, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
 
         # Call AutoDSAC to obtain camera params and the expected ScoreNN loss.
-        exp_loss, camera_params, best_per_loss, best_per_score, best_per_line_dist = \
-            auto_dsac(point_corresponds[0], gt_Ks, gt_Rs, gt_ts, gt_3d[0])
+        for c in range(point_corresponds.shape[0]):
+            # NOTE: GT 3D used only as any other random points for reprojection loss, for now.
+            # TODO: Using GT intrinsics, for now.
+            exp_loss, entropy, camera_params, best_per_loss, best_per_score, best_per_line_dist = \
+                auto_dsac(point_corresponds[c], gt_Ks[c], gt_Rs[c], gt_ts[c], gt_3d)
 
         exp_loss.backward()		        # calculate gradients (pytorch autograd)
         opt_score_nn.step()			    # update parameters
@@ -60,7 +64,7 @@ if __name__ == '__main__':
 
         end_time = time.time() - start_time
 
-        print(f'Iteration: {iteration}, Expected Loss: {exp_loss.item():.4f} ({end_time:.2f}s)\n'
+        print(f'Iteration: {iteration}, Expected Loss: {exp_loss.item():.4f} ({end_time:.2f}s), Entropy: {entropy:.4f}\n'
             f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f}, {best_per_loss[2].item():.4f}) \n' 
             f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}, {best_per_score[2].item():.4f}) \n'
             f'\tBest (per) Line Dist: ({best_per_line_dist[0].item():.4f}, {best_per_line_dist[1].item():.4f}, {best_per_line_dist[2].item():.4f})', 

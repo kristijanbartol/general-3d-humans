@@ -37,7 +37,7 @@ class SparseDataset(Dataset):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
-        cam_idxs --- the subset of camera indexes used (for now, using 2 cameras)
+        cam_idxs --- the subset of camera indexes used (the first is used as a reference)
         num_frames --- number of subset frames, M, used (which means P=M*J)
         num_iterations --- number of iterations per epoch, i.e. length of the dataset
         '''
@@ -49,10 +49,12 @@ class SparseDataset(Dataset):
         self.gt_3d = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
         self.bboxes = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
 
+        self.cam_idxs = cam_idxs
         self.num_iterations = num_iterations
         self.num_frames = num_frames
 
-        # Collect precalculated correspondences, camera params and and 3D GT.
+        # Collect precalculated correspondences, camera params and and 3D GT,
+        # for every subject, based on folder indexes.
         for dirname in os.listdir(rootdir):
             sidx = int(dirname[1:])
             Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs)
@@ -74,15 +76,15 @@ class SparseDataset(Dataset):
                 np.expand_dims(bbox_height / 384., axis=-1), axis=-1)
             self.preds_2d[sidx] += np.expand_dims(self.bboxes[sidx][:, :, 0, :], axis=2)
 
-            # TODO: Obtain GT scale.
+            # TODO: Obtain GT scale to estimate translation also.
 
     @staticmethod
     def __load_camera_params(subject_idx, cam_idxs):
-        '''Loading camera parameters that are prepared prior to learning.
+        '''Loading camera parameters for given subject and camera subset.
 
         Loads camera parameters for a given subject and subset cameras.
         subject_idx --- subject index
-        cam_idxs --- subset of camera indexes (currently using 2 cameras)
+        cam_idxs --- subset of camera indexes
         '''
         labels = np.load('/data/human36m/extra/human36m-multiview-labels-GTbboxes.npy', 
             allow_pickle=True).item()
@@ -116,15 +118,40 @@ class SparseDataset(Dataset):
         selected_frames = np.random.choice(
             np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_frames)
 
-        selected_preds = torch.from_numpy(self.preds_2d[rand_sidx][selected_frames])
-        selected_gt_3d = torch.from_numpy(self.gt_3d[rand_sidx][selected_frames])
-
-        Ks = torch.from_numpy(self.Ks[rand_sidx])
-        Rs = torch.from_numpy(self.Rs[rand_sidx])
-        ts = torch.from_numpy(self.ts[rand_sidx])
+        # Select 2D predictions, 3D GT, and camera parameters 
+        # for a given random subject and selected frames.
+        selected_preds = self.preds_2d[rand_sidx][selected_frames]
+        selected_gt_3d = self.gt_3d[rand_sidx][selected_frames]
+        Ks = self.Ks[rand_sidx]
+        Rs = self.Rs[rand_sidx]
+        ts = self.ts[rand_sidx]
 
         # All points stacked along a single dimension for a single subject.
-        point_corresponds = torch.from_numpy(np.concatenate(
-            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1))
+        point_corresponds = np.concatenate(
+            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1)
+        # TODO: This can be simplified by removing dimension.
+        #selected_3d_gt = selected_gt_3d.reshape(-1, 3)
 
-        return point_corresponds, selected_gt_3d, Ks, Rs, ts
+        batch_point_corresponds = []
+        batch_Ks = []
+        batch_Rs = []
+        batch_ts = []
+        for cam_idx in range(len(self.cam_idxs) - 1):
+            # NOTE: C = # cameras = batch dimension --- use batch dim to stack camera pairs.
+            # batch_point_corresponds: CxPx2x2
+            batch_point_corresponds.append(
+                np.stack([point_corresponds[:, 0], point_corresponds[:, cam_idx + 1]], axis=1))
+            # batch_Ks: Cx2x3x3
+            batch_Ks.append(np.stack([Ks[0], Ks[cam_idx + 1]], axis=0))
+            # batch_Ks: Cx2x3x3
+            batch_Rs.append(np.stack([Rs[0], Rs[cam_idx + 1]], axis=0))
+            # batch_Ks: Cx2x3x1
+            batch_ts.append(np.stack([ts[0], ts[cam_idx + 1]], axis=0))
+
+        batch_point_corresponds = torch.from_numpy(np.array(batch_point_corresponds))
+        selected_gt_3d = torch.from_numpy(selected_gt_3d)
+        batch_Ks = torch.from_numpy(np.array(batch_Ks))
+        batch_Rs = torch.from_numpy(np.array(batch_Rs))
+        batch_ts = torch.from_numpy(np.array(batch_ts))
+
+        return batch_point_corresponds, selected_gt_3d, batch_Ks, batch_Rs, batch_ts
