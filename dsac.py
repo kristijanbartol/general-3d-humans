@@ -246,9 +246,9 @@ class PoseDSAC(DSAC):
 
     @staticmethod
     def __prepare_projection_matrix(K, R, t):
-        return K @ torch.cat((R, t), dim=0)
+        return K @ torch.cat((R, t), dim=1)
 
-    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts):
         '''
         Select a random subset of point correspondences and calculate R and t.
 
@@ -261,19 +261,19 @@ class PoseDSAC(DSAC):
         num_joints = est_2d_pose.shape[1]
 
         all_view_combinations = []
-        for l in range(2, num_cameras):
-            all_view_combinations += itertools.combinations(list(range(num_cameras)))
-        selected_combinations = np.random.choice(
+        for l in range(2, num_cameras + 1):
+            all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
+        selected_combination_idxs = np.random.choice(
             np.arange(len(all_view_combinations)), size=num_joints)
 
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
         for joint_idx in range(num_joints):
-            cidxs = selected_combinations[joint_idx]
-            Ps = torch.cat(
+            cidxs = all_view_combinations[selected_combination_idxs[joint_idx]]
+            Ps = torch.stack(
                 [self.__prepare_projection_matrix(Ks[x], Rs[x], ts[x]) for x in cidxs], 
                 dim=0
             )
-            points_2d = est_2d_pose[cidxs]
+            points_2d = torch.stack([est_2d_pose[x] for x in cidxs], dim=0)[:, joint_idx]
 
             # TODO: Pass confidences here when NG-RANSAC is implemented.
             pose_3d[joint_idx] = \
@@ -292,7 +292,7 @@ class PoseDSAC(DSAC):
         #model_input = line_dists / line_dists.max()
         #model_input = 1 - model_input
 
-        return self.score_nn(est_3d_pose)
+        return self.score_nn(est_3d_pose.flatten().cuda())
 
     # TODO: Update this to work in parallel for all batches.
     def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d):

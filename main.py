@@ -32,8 +32,8 @@ if __name__ == '__main__':
     pose_loss = nn.MSELoss()
 
     # Create camera and pose scoring models.
-    camera_nn = create_camera_nn(input_size=opt.num_frames*opt.num_joints)
-    pose_nn = create_pose_nn(input_size=opt.num_joints)
+    camera_nn = create_camera_nn(input_size=opt.num_frames * opt.num_joints)
+    pose_nn = create_pose_nn(input_size=opt.num_joints * 3)
 
     # Set models for optimization (training).
     if not opt.cpu: camera_nn = camera_nn.cuda()
@@ -66,60 +66,68 @@ if __name__ == '__main__':
     for iteration, batch_items in enumerate(sparse_dataloader):
         start_time = time.time()
 
+        # Compute DSACs on CPU for efficiency.
+        corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
+
+        ##### AutoDSAC ####################
         if not opt.use_gt_cameras:
-            ##### AutoDSAC ####################
             # NOTE: To test AutoDSAC on a single pair, set CAM_IDXS in SparseDataset.
-            # Compute AutoDSAC on CPU for efficiency.
-            point_corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
 
             # Call AutoDSAC to obtain camera params and the expected ScoreNN loss.
-            # NOTE: There are always (C-1) camera pairs.
-            Rs = [gt_Rs[0][0]]
-            ts = [gt_ts[0][0]]
-
             total_cam_exp_loss = 0
 
-            for pair_idx in range(point_corresponds.shape[0]):
+            # NOTE: There are always (C-1) camera pairs.
+            for pair_idx in range(1, corresponds.shape[0]):
+                # Prepare pair-of-views data.
+                corresponds = torch.cat([corresponds[0], corresponds[pair_idx]], dim=0).transpose(0, 1)
+                gt_Ks = torch.cat([gt_Ks[0], gt_Ks[pair_idx]], dim=0)
+                gt_Rs = torch.cat([gt_Rs[0], gt_Rs[pair_idx]], dim=0)
+                gt_ts = torch.cat([gt_ts[0], gt_ts[pair_idx]], dim=0)
+
                 # NOTE: GT 3D used only as any other random points for reprojection loss, for now.
                 # TODO: Using GT intrinsics, for now.
                 cam_exp_loss, entropy, est_params, best_per_loss, best_per_score, best_per_line_dist = \
-                    camera_dsac(point_corresponds[pair_idx], 
-                                gt_Ks[pair_idx], 
-                                gt_Rs[pair_idx], 
-                                gt_ts[pair_idx], 
-                                gt_3d
-                )
+                    camera_dsac(corresponds, gt_Ks, gt_Rs, gt_ts, gt_3d)
                 Rs.append(est_params[0])
                 ts.append(est_params[1])
 
                 total_cam_exp_loss += cam_exp_loss
 
-            total_cam_exp_loss.backward()		        # calculate gradients (pytorch autograd)
+            total_cam_exp_loss.backward()   # calculate gradients (pytorch autograd)
             opt_camera_nn.step()			# update parameters
             opt_camera_nn.zero_grad()	    # reset gradient buffer
+
+            end_time = time.time() - start_time
+
+            print(f'Iteration: {iteration}, Expected Loss: {total_cam_exp_loss.item():.4f} ({end_time:.2f}s), Entropy: {entropy:.4f}\n'
+                f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f}, {best_per_loss[2].item():.4f}) \n' 
+                f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}, {best_per_score[2].item():.4f}) \n'
+                f'\tBest (per) Line Dist: ({best_per_line_dist[0].item():.4f}, {best_per_line_dist[1].item():.4f}, {best_per_line_dist[2].item():.4f})', 
+                flush=True
+            )
             ###################################
         else:
             Rs = gt_Rs
             ts = gt_ts
 
         # TODO: Currently using known intrinsics.
-        # Select init camera intrinsics and then (C-1) other intrinsics.
-        Ks = torch.cat([gt_Ks[0, 0]] + [gt_Ks[x, 1] for x in range(gt_Ks.shape[0])], dim=0)
+        Ks = gt_Ks
 
         ##### PoseDSAC ####################
+        start_time = time.time()
+        total_pose_exp_loss = 0
         for b in range(est_2d.shape[0]):
-            pose_exp_loss, est_3d_pose = pose_dsac(est_2d, Ks, Rs, ts, gt_3d)
+            pose_exp_loss, est_3d_pose = pose_dsac(est_2d[b], Ks, Rs, ts, gt_3d[b])
+            total_pose_exp_loss += pose_exp_loss
 
-        ###################################
+        total_pose_exp_loss.backward()
+        opt_pose_nn.step()
+        opt_pose_nn.zero_grad()
 
         end_time = time.time() - start_time
 
-        print(f'Iteration: {iteration}, Expected Loss: {total_cam_exp_loss.item():.4f} ({end_time:.2f}s), Entropy: {entropy:.4f}\n'
-            f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f}, {best_per_loss[2].item():.4f}) \n' 
-            f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}, {best_per_score[2].item():.4f}) \n'
-            f'\tBest (per) Line Dist: ({best_per_line_dist[0].item():.4f}, {best_per_line_dist[1].item():.4f}, {best_per_line_dist[2].item():.4f})', 
-            flush=True
-        )
+        print(f'Iteration: {iteration}, Expected Loss: {pose_exp_loss:.4f}, (Time: {end_time:.2f}s)')
+        ###################################
         #train_log.write(f'{iteration} {exp_loss} {top_loss}\n')
 
     train_log.close()

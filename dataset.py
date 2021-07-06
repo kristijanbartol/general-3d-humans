@@ -136,10 +136,11 @@ class SparseDataset(Dataset):
 
         # All points stacked along a single dimension for a single subject.
         point_corresponds = np.concatenate(
-            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0].swapaxes(0, 1)
+            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0]
         # TODO: This can be simplified by removing dimension.
         #selected_3d_gt = selected_gt_3d.reshape(-1, 3)
 
+        '''
         batch_point_corresponds = []
         batch_Ks = []
         batch_Rs = []
@@ -155,13 +156,13 @@ class SparseDataset(Dataset):
             batch_Rs.append(np.stack([Rs[0], Rs[cam_idx + 1]], axis=0))
             # batch_Ks: Cx2x3x1
             batch_ts.append(np.stack([ts[0], ts[cam_idx + 1]], axis=0))
+        '''
 
-        batch_point_corresponds = torch.from_numpy(np.array(batch_point_corresponds))
+        point_corresponds = torch.from_numpy(np.array(point_corresponds))
         selected_preds = torch.from_numpy(selected_preds) 
         selected_gt_3d = torch.from_numpy(selected_gt_3d)
-        batch_Ks = torch.from_numpy(np.array(batch_Ks))
-        batch_Rs = torch.from_numpy(np.array(batch_Rs))
-        batch_ts = torch.from_numpy(np.array(batch_ts))
+        Ks = torch.from_numpy(np.array(Ks))
+        Rs = torch.from_numpy(np.array(Rs))
+        ts = torch.from_numpy(np.array(ts))
 
-        return batch_point_corresponds, selected_preds, selected_gt_3d, \
-            batch_Ks, batch_Rs, batch_ts
+        return point_corresponds, selected_preds, selected_gt_3d, Ks, Rs, ts
