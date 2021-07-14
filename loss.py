@@ -26,8 +26,8 @@ class QuaternionLoss:
 
 
 class ReprojectionLoss3D:
-    '''
-    Calculate loss based on the reprojection of points.
+    '''Calculate loss based on the reprojection of points.
+
     '''
 
     def __init__(self, device='cpu'):
@@ -49,3 +49,20 @@ class ReprojectionLoss3D:
             points_3d, kpts_2d_projs, gt_Ks, gt_Rs, gt_ts[0], gt_ts[1], R_est)
 
         return error_3d
+
+
+class MPJPELoss():
+    '''Calculate MPJPE loss.
+    
+    '''
+
+    def __init__(self, device='cpu'):
+        self.device = device
+
+    def __call__(self, est_3d, gt_3d):
+        '''Calculate MPJPE loss between two 3D poses.
+
+        est_3d -- triangulated 3D pose
+        gt_3d -- GT 3D pose
+        '''
+        return torch.mean(torch.norm(est_3d - gt_3d, p=2, dim=1))

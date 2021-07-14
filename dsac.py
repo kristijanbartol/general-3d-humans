@@ -140,7 +140,6 @@ class CameraDSAC(DSAC):
                 J is the number of joints
                 3 is the number of coordinates (x, y, z)
         '''
-        hyp_line_dists = torch.zeros([self.hyps, 1], device=self.device)    # line dists of each hypothesis
         hyp_losses = torch.zeros([self.hyps, 1], device=self.device)        # loss of each hypothesis
         hyp_scores = torch.zeros([self.hyps, 1], device=self.device)        # score of each hypothesis
 
@@ -175,7 +174,6 @@ class CameraDSAC(DSAC):
             # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
-            hyp_line_dists[h] = line_dist
 
             #print(f'{h}. {loss.item():3.4f} \t{score.item():3.4f} \t{line_dist.item():3.4f}')
 
@@ -292,7 +290,7 @@ class PoseDSAC(DSAC):
         #model_input = line_dists / line_dists.max()
         #model_input = 1 - model_input
 
-        return self.score_nn(est_3d_pose.flatten().cuda())
+        return 1 - self.score_nn(est_3d_pose.flatten().cuda())
 
     # TODO: Update this to work in parallel for all batches.
     def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d):
@@ -305,24 +303,15 @@ class PoseDSAC(DSAC):
         ts -- GT/estimated translations for B frames: (Cx3x1)
         gts_3d -- GT 3D poses: (Jx3)
         '''
-        hyp_poses = torch.zeros([self.hyps, gt_3d.shape[0], 3], device=self.device)    # pose hyps
         hyp_losses = torch.zeros([self.hyps, 1], device=self.device)                   # hyp losses
         hyp_scores = torch.zeros([self.hyps, 1], device=self.device)                   # hyp scores
 
-        '''
+        
         best_loss_loss = 1000           # this one is a reference
         best_loss_score = 0
-        best_loss_line_dist = 0
 
         best_score_loss = 0
         best_score_score = 0            # this one is a reference
-        best_score_line_dist = 0
-
-        best_line_dist_loss = 0
-        best_line_dist_score = 0
-        best_line_dist_dist = 10000     # this one is a reference
-        '''
-        best_score = 0.
 
         selected_pose = None
 
@@ -338,53 +327,33 @@ class PoseDSAC(DSAC):
             loss = self.loss_function(triang_3d, gt_3d)
 
             # Store results.
-            hyp_poses[h] = h
             hyp_losses[h] = loss
             hyp_scores[h] = score
 
-            #print(f'{h}. {loss.item():3.4f} \t{score.item():3.4f} \t{line_dist.item():3.4f}')
-
-            '''
-            # Keep track of best hypotheses with respect to loss, score and line dists.
+            # Keep track of best hypotheses with respect to loss and score.
             # TODO: Simplify this by taking argmax for each reference variable.
             if loss < best_loss_loss:
                 best_loss_loss = loss
                 best_loss_score = score
-                best_loss_line_dist = line_dist
 
             if score > best_score_score:
                 best_score_loss = loss
                 best_score_score = score
-                best_score_line_dist = line_dist
                 selected_pose = triang_3d
-
-            if line_dist < best_line_dist_dist:
-                best_line_dist_loss = loss
-                best_line_dist_score = score
-                best_line_dist_dist = line_dist
-            '''
-            if score > best_score:
-                best_score = score
-                selected_pose = triang_3d
-        '''
-        best_loss = (best_loss_loss, best_loss_score, best_loss_line_dist)
-        best_score = (best_score_loss, best_score_score, best_score_line_dist)
-        best_line_dist = (best_line_dist_loss, best_line_dist_score, best_line_dist_dist)
-        '''
+        
+        best_loss = (best_loss_loss, best_loss_score)
+        best_score = (best_score_loss, best_score_score)
 
         # === Step 4: calculate the expectation ===========================
 
         # Softmax distribution from hypotheses scores.
-        #hyp_scores_softmax = F.softmax(self.inlier_alpha * hyp_scores)
         hyp_scores_softmax = F.softmax(hyp_scores, dim=0)
 
         # Loss expectation.
         hyp_losses /= hyp_losses.max()
         softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
+        #exp_loss = torch.sum(hyp_losses * hyp_scores_softmax) + 0.5 * softmax_entropy
         exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
 
-        # Categorical cross-entropy loss.
-        #cross_entropy = cross_entropy_loss(hyp_scores_softmax, hyp_losses)
-
-        return exp_loss, selected_pose
+        return exp_loss, softmax_entropy, selected_pose, best_loss, best_score

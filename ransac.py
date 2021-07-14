@@ -13,25 +13,26 @@ import copy
 
 from mvn.utils.multiview import create_fundamental_matrix, find_rotation_matrices, compare_rotations, \
     evaluate_projection, evaluate_reconstruction, distance_between_projections, solve_four_solutions, \
-    move_along_epipolar, triangulate_points_multiview_torch
+    move_along_epipolar, triangulate_points_multiview_torch, get_positive_points_mask
 from mvn.utils.vis import draw_2d_pose_cv2, draw_images, draw_epipolar_lines, draw_cameras_and_pose
 from mvn.utils.img import denormalize_image, image_batch_to_numpy
 
 
 SUBJECT_IDX = 9
-IDXS = [3, 1]
+IDXS = [1, 0]
 
 
 DATA_ROOT = f'./results/S{SUBJECT_IDX}/'
 
-IMGS_PATH = os.path.join(DATA_ROOT, 'all_images.npy')
-PRED_PATH = os.path.join(DATA_ROOT, 'all_2d_preds.npy')
-GT_PATH = os.path.join(DATA_ROOT, 'all_3d_gt.npy')
-KS_BBOX_PATH = os.path.join(DATA_ROOT, 'Ks_bboxed.npy')
+# TODO: Update paths and concatenate numpy arrays.
+IMGS_PATH = os.path.join(DATA_ROOT, 'all_images0.npy')
+PRED_PATH = os.path.join(DATA_ROOT, 'all_2d_preds0.npy')
+GT_PATH = os.path.join(DATA_ROOT, 'all_3d_gt0.npy')
+KS_BBOX_PATH = os.path.join(DATA_ROOT, 'Ks_bboxed0.npy')
 K_PATH = os.path.join(DATA_ROOT, 'Ks.npy')
 R_PATH = os.path.join(DATA_ROOT, 'Rs.npy')
 T_PATH = os.path.join(DATA_ROOT, 'ts.npy')
-BBOX_PATH = os.path.join(DATA_ROOT, 'all_bboxes.npy')
+BBOX_PATH = os.path.join(DATA_ROOT, 'all_bboxes0.npy')
 
 M = 50             # number of frames
 J = 17              # number of joints
@@ -41,7 +42,7 @@ eps = 0.75           # outlier probability
 S = 100              # sample size
 #I = (1 - eps) * P  # number of inliers condition
 I = 0
-D = 1.             # distance criterion
+D = .5             # distance criterion
 T = int(N/20)              # number of top candidates to use
 
 
@@ -86,9 +87,9 @@ if __name__ == '__main__':
         ts = torch.unsqueeze(torch.tensor(ts, device='cuda', dtype=torch.float32), dim=0)
         bboxes = np.load(BBOX_PATH)
 
-        #frame_selection = np.random.choice(np.arange(all_2d_preds.shape[0]), size=M)
+        frame_selection = np.random.choice(np.arange(all_2d_preds.shape[0]), size=M)
         #frame_selection = np.arange(50)
-        frame_selection = np.arange(all_2d_preds.shape[0])  # using all available frames for sampling in each run
+        #frame_selection = np.arange(all_2d_preds.shape[0])  # using all available frames for sampling in each run
 
         all_2d_preds = all_2d_preds[frame_selection][:, IDXS]
         all_3d_gt = all_3d_gt[frame_selection]
@@ -140,7 +141,7 @@ if __name__ == '__main__':
 
             inliers = torch.stack((kpts1_gt, kpts2_gt), dim=1)[condition]
             try:
-                R_gt1, R_gt2, t_rel, F = find_rotation_matrices(inliers, Ks)
+                R_gt1, R_gt2, t_rel, F = find_rotation_matrices(inliers, Ks[0])
             except Exception as ex:
                 print(f'[GT data + GT camera params] {ex}')
 
@@ -185,7 +186,7 @@ if __name__ == '__main__':
 
             inliers = point_corresponds[condition]
             try:
-                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(inliers, Ks)
+                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(inliers, Ks[0])
             except Exception as ex:
                 print(f'[GT camera params] {ex}')
 
@@ -225,7 +226,7 @@ if __name__ == '__main__':
             #assert(num_inliers == point_corresponds.shape[0])
 
             try:
-                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(kpts_2d_projs, Ks)
+                R_gt1, R_gt2, t_rel, _ = find_rotation_matrices(kpts_2d_projs, Ks[0])
             except Exception as ex:
                 print(f'[Autocalibration using triangulated points (GT)] {ex}')
 
@@ -265,7 +266,7 @@ if __name__ == '__main__':
 
                 selected_idxs = torch.tensor(np.random.choice(np.arange(point_corresponds.shape[0]), size=S), device='cuda')
 
-                R_initial1, R_initial2, t_rel, _ = find_rotation_matrices(point_corresponds[selected_idxs], Ks)
+                R_initial1, R_initial2, t_rel, _ = find_rotation_matrices(point_corresponds[selected_idxs], Ks[0])
                 
                 try:
                     t_rel = t_rel * scale
@@ -281,7 +282,8 @@ if __name__ == '__main__':
                     invalid_counter += 1
                     continue
 
-                # NOTE: t[0] is probably t_rel?
+                positive_mask = get_positive_points_mask(point_corresponds, Ks[0], Rs[0], ts[0], R_initial, t2)
+
                 line_dists_initial = distance_between_projections(
                         point_corresponds[:, 0], point_corresponds[:, 1], 
                         Ks[0], Rs[0, 0], R_initial, ts[0][0], t2)
