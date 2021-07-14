@@ -33,7 +33,7 @@ ORD_SUBJECT_MAP = {
 class SparseDataset(Dataset):
     '''Temporary dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, cam_idxs, num_frames=30, num_iterations=50000):
+    def __init__(self, rootdir, cam_idxs, num_joints=17, num_frames=30, num_iterations=50000):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
@@ -50,7 +50,9 @@ class SparseDataset(Dataset):
         self.bboxes = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
 
         self.cam_idxs = cam_idxs
+        self.num_cameras = len(cam_idxs)
         self.num_iterations = num_iterations
+        self.num_joints = num_joints
         self.num_frames = num_frames
 
         # Collect precalculated correspondences, camera params and and 3D GT,
@@ -62,13 +64,31 @@ class SparseDataset(Dataset):
             self.Rs[sidx] = Rs
             self.ts[sidx] = ts
 
-            pred_path = os.path.join(rootdir, dirname, 'all_2d_preds.npy')
-            gt_path = os.path.join(rootdir, dirname, 'all_3d_gt.npy')
-            bbox_path = os.path.join(rootdir, dirname, 'all_bboxes.npy')
+            dirpath = os.path.join(rootdir, dirname)
 
-            self.preds_2d[sidx] = np.load(pred_path)[:, cam_idxs]
-            self.gt_3d[sidx] = np.load(gt_path)
-            self.bboxes[sidx] = np.load(bbox_path)[:, cam_idxs]
+            self.preds_2d[sidx] = np.empty((0, self.num_cameras, num_joints, 2), dtype=np.float32)
+            self.gt_3d[sidx] = np.empty((0, num_joints, 3), dtype=np.float32)
+            self.bboxes[sidx] = np.empty((0, self.num_cameras, 2, 2), dtype=np.float32)
+            fcounter = 0
+            data_files = os.listdir(dirpath)
+            while True:
+                pred_path = os.path.join(dirpath, f'all_2d_preds{fcounter}.npy')
+                gt_path = os.path.join(dirpath, f'all_3d_gt{fcounter}.npy')
+                bbox_path = os.path.join(dirpath, f'all_bboxes{fcounter}.npy')
+
+                if not os.path.exists(pred_path):
+                    # All data has been collected.
+                    break
+
+                preds_2d = np.load(pred_path)[:, cam_idxs]
+                gt_3d = np.load(gt_path)
+                bboxes = np.load(bbox_path)[:, cam_idxs]
+
+                self.preds_2d[sidx] = np.concatenate((self.preds_2d[sidx], preds_2d), axis=0)
+                self.gt_3d[sidx] = np.concatenate((self.gt_3d[sidx], gt_3d), axis=0)
+                self.bboxes[sidx] = np.concatenate((self.bboxes[sidx], bboxes), axis=0)
+
+                fcounter += 1
 
             # Unbbox keypoints.
             bbox_height = np.abs(self.bboxes[sidx][:, :, 0, 0] - self.bboxes[sidx][:, :, 1, 0])
@@ -105,7 +125,7 @@ class SparseDataset(Dataset):
     def __len__(self):
         return self.num_iterations
 
-    # NOTE: Not using idx, might not DataLoader.
+    # NOTE: Not using idx, might not need DataLoader.
     def __getitem__(self, idx):
         '''
         Get random subset of point correspondences from the preset number of frames.

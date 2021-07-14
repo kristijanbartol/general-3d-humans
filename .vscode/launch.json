@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--use_gt_cameras"
+                "--autodsac_only"
             ]
         }
     ]

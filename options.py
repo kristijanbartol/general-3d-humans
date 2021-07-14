@@ -48,7 +48,9 @@ def parse_args():
     parser.add_argument('--storeinterval', '-si', type=int, default=1000,
         help='store network weights and a prediction vizualisation every x training iterations')
 
-    parser.add_argument('--use_gt_cameras', dest='use_gt_cameras', action='store_true')
+    parser.add_argument('--posedsac_only', dest='posedsac_only', action='store_true')
+
+    parser.add_argument('--autodsac_only', dest='autodsac_only', action='store_true')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 
