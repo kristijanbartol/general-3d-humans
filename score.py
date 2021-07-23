@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-def create_camera_nn(input_size=50*17, hidden_layer_sizes=[200, 300, 200], out_size=1):
+def create_camera_nn(input_size=50*17, hidden_layer_sizes=[700, 500, 300, 300, 100], out_size=1):
     layers = [
         nn.Linear(input_size, hidden_layer_sizes[0]),
         nn.ReLU6()

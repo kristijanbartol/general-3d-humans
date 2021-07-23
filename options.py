@@ -10,13 +10,16 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
-    parser.add_argument('--camera_hypotheses', '-chyps', type=int, default=200,
+    parser.add_argument('--layers', type=int, nargs='+', default=[700, 500, 300, 300, 100],
+        help='number of neurons per layer')
+
+    parser.add_argument('--camera_hypotheses', '-chyps', type=int, default=100,
         help='number of sampled hypotheses in every cameraDSAC iteration')
 
     parser.add_argument('--pose_hypotheses', '-phyps', type=int, default=200,
         help='number of sampled hypotheses in every poseDSAC iteration')
 
-    parser.add_argument('--sample_size', '-ssize', type=int, default=50,
+    parser.add_argument('--sample_size', '-ssize', type=int, default=80,
         help='number of point correspondences sampled to estimate camera parameters')
 
     parser.add_argument('--num_joints', '-jnt', type=int, default=17,
@@ -34,13 +37,28 @@ def parse_args():
     parser.add_argument('--inlier_beta', '-ib', type=float, default=100.0,
         help='scaling factor within the sigmoid of the soft inlier count')
 
-    parser.add_argument('--inlier_alpha', '-ia', type=float, default=0.5,
-        help='scaling factor for the soft inlier scores (controls the peakiness of the hypothesis distribution)')
+    parser.add_argument('--temp', '-t', type=float, default=1.,
+        help='softmax temperature regulating how close the distribution is to categorical')
 
-    parser.add_argument('--learning_rate', '-lr', type=float, default=0.001, help='learning rate')
+    parser.add_argument('--entropy_beta', '-e', type=float, default=1.,
+        help='entropy coeficient (the more, the stronger the regularization)')
+        
+    parser.add_argument('--min_entropy', type=float, default=0.,
+        help='entropy coeficient (the more, the stronger the regularization)')
 
-    parser.add_argument('--lr_step', '-lrs', type=int, default=2500,
+    parser.add_argument('--learning_rate', '-lr', type=float, default=0.0001, help='learning rate')
+
+    parser.add_argument('--lr_step', '-lrs', type=int, default=100,
         help='cut learning rate in half each x iterations')
+
+    parser.add_argument('--lr_gamma', '-lrg', type=float, default=0.5,
+        help='learning rate decay factor')
+
+    parser.add_argument('--temp_step', '-ts', type=int, default=30,
+        help='cut learning rate in half each x iterations')
+
+    parser.add_argument('--temp_gamma', '-tg', type=float, default=0.8,
+        help='rate of temperature decrease')
 
     parser.add_argument('--lrstepoffset', '-lro', type=int, default=30000,
         help='keep initial learning rate for at least x iterations')
@@ -50,7 +68,14 @@ def parse_args():
 
     parser.add_argument('--posedsac_only', dest='posedsac_only', action='store_true')
 
-    parser.add_argument('--autodsac_only', dest='autodsac_only', action='store_true')
+    parser.add_argument('--camdsac_only', dest='camdsac_only', action='store_true')
+
+    parser.add_argument('--gumbel', dest='gumbel', action='store_true')
+
+    parser.add_argument('--hard', dest='hard', action='store_true')
+
+    parser.add_argument('--entropy_to_scores', dest='entropy_to_scores', action='store_true',
+        help='minimize entropy directly on scores, not softmaxed scores')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 

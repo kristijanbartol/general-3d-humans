@@ -24,15 +24,14 @@ class CameraDSAC(DSAC):
     Differentiable RANSAC for camera autocalibration.
     '''
 
-    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, inlier_alpha, score_nn, 
-            loss_function, scale=None, device='cpu'):
+    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, entropy_beta, min_entropy, entropy_to_scores,
+            temp, gumbel, hard, score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
         hyps -- number of hypotheses (trials) for each CameraDSAC iteration
         sample_size -- number of point correspondences to use for camera parameter estimation
         inlier_thresh -- threshold used in the soft inlier count, its measured in relative image size (1 = image width)
         inlier_beta -- scaling factor within the sigmoid of the soft inlier count
-        inlier_alpha -- scaling factor for the soft inlier scores (controls the peakiness of the hypothesis distribution)
         loss_function -- function to compute the quality of estimated line parameters wrt ground truth
         scale --- scalar, GT scale, used to obtain proper translation
         device --- 'cuda' or 'cpu'
@@ -42,7 +41,16 @@ class CameraDSAC(DSAC):
         self.sample_size = sample_size
         self.inlier_thresh = inlier_thresh
         self.inlier_beta = inlier_beta
-        self.inlier_alpha = inlier_alpha
+        
+        self.temp = temp
+
+        self.entropy_beta = entropy_beta
+        self.min_entropy = min_entropy
+        self.entropy_to_scores = entropy_to_scores
+
+        self.gumbel = gumbel
+        self.hard = hard
+
         self.score_nn = score_nn
         self.loss_function = loss_function
         self.device = device
@@ -102,6 +110,7 @@ class CameraDSAC(DSAC):
         # Normalize and invert line distance values for NN.
         #model_input = line_dists / line_dists.max()
         #model_input = 1 - model_input
+        line_dists, _ = torch.sort(line_dists, dim=0, descending=True)
 
         #return 1 - self.score_nn(line_dists.cuda()), line_dists.mean()
         return self.score_nn(line_dists.cuda()), line_dists.mean()
@@ -140,28 +149,20 @@ class CameraDSAC(DSAC):
                 J is the number of joints
                 3 is the number of coordinates (x, y, z)
         '''
-        hyp_losses = torch.zeros([self.hyps, 1], device=self.device)        # loss of each hypothesis
-        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)        # score of each hypothesis
+        hyp_losses = torch.ones([self.hyps, 1], device=self.device) * 100.        # loss of each hypothesis
+        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)              # score of each hypothesis
+        line_dists = torch.ones([self.hyps, 1], device=self.device) * 1000.       # list of all line dists
 
-        best_loss_loss = 1000           # this one is a reference
-        best_loss_score = 0
-        best_loss_line_dist = 0
-
-        best_score_loss = 0
-        best_score_score = 0            # this one is a reference
-        best_score_line_dist = 0
-
-        best_line_dist_loss = 0
-        best_line_dist_score = 0
-        best_line_dist_dist = 10000     # this one is a reference
-
+        max_score = 0.
         selected_params = None
+        invalid_hyps = 0
 
         for h in range(0, self.hyps):
 
             # === Step 1: Sample hypothesis ===========================
             cam_params = self.__sample_hyp(point_corresponds, Ks, Rs, ts)
             if cam_params is None:
+                invalid_hyps += 1
                 continue  # skip invalid hyps
 
             # === Step 2: Score hypothesis using soft inlier count ====
@@ -174,53 +175,61 @@ class CameraDSAC(DSAC):
             # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
+            line_dists[h] = line_dist
 
-            #print(f'{h}. {loss.item():3.4f} \t{score.item():3.4f} \t{line_dist.item():3.4f}')
-
-            # Keep track of best hypotheses with respect to loss, score and line dists.
-            # TODO: Simplify this by taking argmax for each reference variable.
-            if loss < best_loss_loss:
-                best_loss_loss = loss
-                best_loss_score = score
-                best_loss_line_dist = line_dist
-
-            if score > best_score_score:
-                best_score_loss = loss
-                best_score_score = score
-                best_score_line_dist = line_dist
+            if score > max_score:
+                max_score = score
                 selected_params = cam_params
-
-            if line_dist < best_line_dist_dist:
-                best_line_dist_loss = loss
-                best_line_dist_score = score
-                best_line_dist_dist = line_dist
-
-        best_loss = (best_loss_loss, best_loss_score, best_loss_line_dist)
-        best_score = (best_score_loss, best_score_score, best_score_line_dist)
-        best_line_dist = (best_line_dist_loss, best_line_dist_score, best_line_dist_dist)
-
-        # TODO: Calculate correlations
 
         # === Step 4: calculate the expectation ===========================
 
         # Softmax distribution from hypotheses scores.
-        #hyp_scores_softmax = F.softmax(self.inlier_alpha * hyp_scores)
-        hyp_scores_softmax = F.softmax(hyp_scores, dim=0)
+        if self.gumbel:
+            #softmax_mask = torch.zeros((hyp_scores.shape[0], 1), dtype=torch.float32, device=self.device)
+            #softmax_mask[hyp_scores.nonzero(as_tuple=True)[0]] = 1.
+            hyp_scores_softmax = F.gumbel_softmax(hyp_scores, tau=self.temp, hard=self.hard, dim=0)
+        else:  
+            hyp_scores_softmax = F.softmax(hyp_scores / self.temp, dim=0)
+
+        # Store best hypotheses (for logging).
+        best_loss_idx = torch.argmin(hyp_losses, dim=0)
+        best_softmax_score_idx = torch.argmax(hyp_scores_softmax, dim=0)
+        best_score_idx = torch.argmax(hyp_scores, dim=0)
+        best_line_dist_idx = torch.argmin(line_dists, dim=0)
+
+        best_loss = (hyp_losses[best_loss_idx], hyp_scores_softmax[best_loss_idx], 
+            hyp_scores[best_loss_idx], line_dists[best_loss_idx])
+        best_softmax_score = (hyp_losses[best_softmax_score_idx], hyp_scores_softmax[best_softmax_score_idx], 
+            hyp_scores[best_softmax_score_idx], line_dists[best_softmax_score_idx])
+        best_score = (hyp_losses[best_score_idx], hyp_scores_softmax[best_score_idx], 
+            hyp_scores[best_score_idx], line_dists[best_score_idx])
+        best_line_dist = (hyp_losses[best_line_dist_idx], hyp_scores_softmax[best_line_dist_idx], 
+            hyp_scores[best_line_dist_idx], line_dists[best_line_dist_idx])
 
         # Loss expectation.
+        if self.entropy_to_scores:
+            softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+            #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
+        else:
+            softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
+
         hyp_losses /= hyp_losses.max()
-        softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
-        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax) + 0.6 * softmax_entropy #* 2 * (0.3 / 5.3)
-        #exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
+        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
+        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-        # Categorical cross-entropy loss.
-        cross_entropy = cross_entropy_loss(hyp_scores_softmax, hyp_losses)
+        total_loss = exp_loss + self.entropy_beta * softmax_entropy
 
-        selected_params = self.__get_absolute_params(
-            Rs[0], ts[0], selected_params[0], selected_params[1])
+        if not invalid_hyps == self.hyps:
+            selected_params = self.__get_absolute_params(
+                Rs[0], ts[0], selected_params[0], selected_params[1])
+        else:
+            print('All scores are zero!')
+            return None
 
-        return exp_loss, softmax_entropy, selected_params, best_loss, best_score, best_line_dist
+        print(f'Invalid hyps: {invalid_hyps}')
+
+        return total_loss, exp_loss, entropy_loss, selected_params, best_loss, best_softmax_score, best_score, best_line_dist
 
 
 

@@ -11,7 +11,16 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--autodsac_only"
+                "--camdsac_only",
+                //"--layers", "700", "500", "300", "300", "100",
+                "--layers", "200", "300", "200",
+                "--temp", "1.5",
+                "--gumbel",
+                "--entropy_beta", ".01",
+                "--entropy_to_scores",
+                "-lr", "0.00001",
+                //"-lr", "0.0001",
+                "-lrs", "100"
             ]
         }
     ]
