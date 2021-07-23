@@ -7,8 +7,20 @@ import random
 from torch.utils.data import Dataset
 
 
-TRAIN_SIDXS = [1, 5, 6, 7, 8]
+TRAIN_SIDXS = [1, 5, 6, 7]
+VAL_SIDXS = [8]
 TEST_SIDXS = [9, 11]
+
+TRAIN = 'train'
+VALID = 'valid'
+TEST = 'test'
+
+SET_SIDXS_MAP = {
+    TRAIN: TRAIN_SIDXS,
+    VALID: VAL_SIDXS,
+    TEST: TEST_SIDXS
+}
+
 SUBJECT_ORD_MAP = {
         1:  0,
         5:  1,
@@ -33,7 +45,7 @@ ORD_SUBJECT_MAP = {
 class SparseDataset(Dataset):
     '''Temporary dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, cam_idxs, num_joints=17, num_frames=30, num_iterations=50000):
+    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50000):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
@@ -41,13 +53,15 @@ class SparseDataset(Dataset):
         num_frames --- number of subset frames, M, used (which means P=M*J)
         num_iterations --- number of iterations per epoch, i.e. length of the dataset
         '''
+        self.sidxs = SET_SIDXS_MAP[data_type]
+
         # Initialize data for each subject.
-        self.Ks = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
-        self.Rs = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
-        self.ts = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
-        self.preds_2d = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
-        self.gt_3d = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
-        self.bboxes = dict.fromkeys(TRAIN_SIDXS + TEST_SIDXS)
+        self.Ks = dict.fromkeys(self.sidxs)
+        self.Rs = dict.fromkeys(self.sidxs)
+        self.ts = dict.fromkeys(self.sidxs)
+        self.preds_2d = dict.fromkeys(self.sidxs)
+        self.gt_3d = dict.fromkeys(self.sidxs)
+        self.bboxes = dict.fromkeys(self.sidxs)
 
         self.cam_idxs = cam_idxs
         self.num_cameras = len(cam_idxs)
@@ -55,10 +69,14 @@ class SparseDataset(Dataset):
         self.num_joints = num_joints
         self.num_frames = num_frames
 
+        self.num_poses = 0
+
         # Collect precalculated correspondences, camera params and and 3D GT,
         # for every subject, based on folder indexes.
         for dirname in os.listdir(rootdir):
             sidx = int(dirname[1:])
+            if not sidx in self.sidxs:
+                continue
             Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs)
             self.Ks[sidx] = Ks
             self.Rs[sidx] = Rs
@@ -88,6 +106,7 @@ class SparseDataset(Dataset):
                 self.gt_3d[sidx] = np.concatenate((self.gt_3d[sidx], gt_3d), axis=0)
                 self.bboxes[sidx] = np.concatenate((self.bboxes[sidx], bboxes), axis=0)
 
+                self.num_poses += self.gt_3d[sidx].shape[0]
                 fcounter += 1
 
             # Unbbox keypoints.
@@ -138,9 +157,8 @@ class SparseDataset(Dataset):
         batch_Rs -- [Cx2x3x3]
         batch_ts -- [Cx2x3x1]
         '''
-        rand_sidx = ORD_SUBJECT_MAP[random.randint(0, len(TRAIN_SIDXS))]
-        # TODO: At the moment, only have S9 keypoints.
-        rand_sidx = 9
+        rand_idx = random.randint(0, len(self.sidxs) - 1)
+        rand_sidx = self.sidxs[rand_idx]
 
         # Selecting a subset of frames.
         selected_frames = np.random.choice(

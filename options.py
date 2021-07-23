@@ -28,8 +28,11 @@ def parse_args():
     parser.add_argument('--num_frames', type=int, default=50,
         help='number of frames used for camera autocalibration in each iteration')
 
-    parser.add_argument('--num_iterations', '-ti', type=int, default=50000,
-        help='number of training iterations (= parameter updates = dataset length)')
+    parser.add_argument('--num_iterations', '-ti', type=int, default=50,
+        help='number of training iterations per epoch (= dataset length)')
+
+    parser.add_argument('--num_epochs', '-e', type=int, default=100,
+        help='number of epochs (= num of validations)')
 
     parser.add_argument('--inlier_threshold', '-it', type=float, default=1.,
         help='threshold for 3D line distances used in the soft inlier count')
@@ -40,7 +43,7 @@ def parse_args():
     parser.add_argument('--temp', '-t', type=float, default=1.,
         help='softmax temperature regulating how close the distribution is to categorical')
 
-    parser.add_argument('--entropy_beta', '-e', type=float, default=1.,
+    parser.add_argument('--entropy_beta', '-eb', type=float, default=1.,
         help='entropy coeficient (the more, the stronger the regularization)')
         
     parser.add_argument('--min_entropy', type=float, default=0.,
