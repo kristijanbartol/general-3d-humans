@@ -10,7 +10,7 @@ from dsac import CameraDSAC, PoseDSAC
 from dataset import SparseDataset, TRAIN, VALID, TEST
 from loss import QuaternionLoss, ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
-from mvn.utils.vis import draw_3d_pose
+from mvn.utils.vis import draw_3d_pose, CONNECTIVITY_DICT
 from options import parse_args
 
 
@@ -30,13 +30,24 @@ if __name__ == '__main__':
     valid_set = SparseDataset(opt.rootdir, VALID, CAM_IDXS, opt.num_joints, opt.num_frames, opt.num_iterations)
     test_set  = SparseDataset(opt.rootdir, TEST, CAM_IDXS, opt.num_joints, opt.num_frames, opt.num_iterations)
 
+    mean_3d = train_set.mean_3d
+    std_3d = train_set.std_3d
+
     # Create camera and pose losses.
     camera_loss = ReprojectionLoss3D()
     pose_loss = MPJPELoss()
 
     # Create camera and pose scoring models.
+    num_body_parts = len(CONNECTIVITY_DICT["human36m"])
+    if opt.body_lengths_mode == 0:
+        pose_input_size = opt.num_joints * 3
+    elif opt.body_lengths_mode == 1:
+        pose_input_size = opt.num_joints * 3 + num_body_parts
+    elif opt.body_lengths_mode == 2:
+        pose_input_size = num_body_parts
+
     camera_nn = create_camera_nn(input_size=opt.num_frames * opt.num_joints, hidden_layer_sizes=opt.layers_camdsac)
-    pose_nn = create_pose_nn(input_size=opt.num_joints * 3, hidden_layer_sizes=opt.layers_posedsac)
+    pose_nn = create_pose_nn(input_size=pose_input_size, hidden_layer_sizes=opt.layers_posedsac)
 
     # Set models for optimization (training).
     if not opt.cpu: camera_nn = camera_nn.cuda()
@@ -57,8 +68,8 @@ if __name__ == '__main__':
     camera_dsac = CameraDSAC(opt.camera_hypotheses, opt.sample_size, opt.inlier_threshold, 
         opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
         opt.temp, opt.gumbel, opt.hard, camera_nn, camera_loss)
-    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.entropy_beta_pose, opt.min_entropy, opt.entropy_to_scores,
-        opt.temp, opt.gumbel, opt.hard, pose_nn, pose_loss)
+    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, opt.entropy_to_scores,
+        opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, opt.weighted_selection, pose_nn, pose_loss)
 
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,
@@ -73,6 +84,13 @@ if __name__ == '__main__':
         train_score = 0
         camera_nn.train()
         pose_nn.train()
+
+        # Init PoseDSAC metrics.
+        ranks = []          # hypotheses ranks
+        mpjpes = []         # MPJPEs of the hypotheses
+        diffs = []          # difference between the hypothesis MPJPE and best MPJPE
+        top_losses = []     # losses of top hypotheses
+        bottom_losses = []  # losses of worst hypotheses
 
         for iteration, batch_items in enumerate(train_dataloader):
             if iteration % opt.temp_step == 0 and iteration != 0:
@@ -164,25 +182,57 @@ if __name__ == '__main__':
                 Ks = gt_Ks
 
                 avg_total_loss = 0
+
                 num_frames = est_2d.shape[0]
                 for fidx in range(num_frames):
-                    total_loss, exp_loss, entropy_loss, est_3d_pose, best_per_loss, best_per_score = pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx])
+                    pose_result = \
+                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d)
+
+                    if opt.weighted_selection:
+                        total_loss, best_per_loss = pose_result
+                        print(total_loss.item(), best_per_loss[0].item())
+                    else:
+                        total_loss, exp_loss, entropy_loss, baseline_loss, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+
+                        # Update metrics.
+                        mpjpe = best_per_score[0]
+                        diff = torch.abs(best_per_score[0] - best_per_loss[0])
+
+                        if len(ranks) == 100:
+                            ranks[:-1] = ranks[1:]; ranks[-1] = rank
+                            mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
+                            diffs[:-1] = diffs[1:]; diffs[-1] = diff
+                            top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
+                            bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
+                        else:
+                            ranks.append(rank)
+                            mpjpes.append(mpjpe)
+                            diffs.append(diff)
+                            top_losses.append(top_loss)
+                            bottom_losses.append(bottom_loss)
+
+                        mean_rank = torch.stack(ranks, dim=0).mean()
+                        mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
+                        mean_diff = torch.stack(diffs, dim=0).mean()
+                        mean_top_loss = torch.stack(top_losses, dim=0).mean()
+                        mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
+
+                        # Log to stdout.
+                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), Expectation Loss: {exp_loss:.4f}, Entropy Loss: {entropy_loss:.4f} [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff: {mean_diff:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                            f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
+                            f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
+                            f'\tBaseline Loss: \t\t({baseline_loss:.4f})',
+                            flush=True
+                        )
+
                     avg_total_loss += total_loss
 
-                    print(f'Iteration: {iteration} ({fidx + 1}/{num_frames} frames), Expectation Loss: {exp_loss:.4f}, Entropy Loss: {entropy_loss:.4f}\n'
-                        f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n' 
-                        f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f})',
-                        flush=True
-                    )
+                    if fidx % opt.pose_batch_size == 0 and fidx != 0:
+                        avg_total_loss.backward()
+                        opt_pose_nn.step()
+                        opt_pose_nn.zero_grad()
 
-                    # TODO: Create a grid of subplots to plot est_3d_pose for all frames (and corresponding GT).
-
-                    #avg_total_loss /= num_frames
-                    avg_total_loss = total_loss
-
-                    avg_total_loss.backward()
-                    opt_pose_nn.step()
-                    opt_pose_nn.zero_grad()
+                        avg_total_loss = 0
             ################################################
         print(f'End of epoch #{epoch_idx + 1} (validation - CamDSAC). SCORE={train_score}\n')
 

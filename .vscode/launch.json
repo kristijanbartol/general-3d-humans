@@ -16,15 +16,19 @@
                 "--layers_camdsac", "200", "300", "200",
 
                 "--temp", "1.5",
-                "--gumbel",
-                "--entropy_beta_cam", ".01",
+                //"--gumbel",
+                "--entropy_beta_cam", ".1",
                 "--entropy_to_scores",
-                "-lr", "0.00001",
+                "-lr", "0.001",
                 "-lrs", "100",
 
-                "--pose_hypotheses", "20",
-                "--layers_posedsac", "700", "500", "300", "300", "100",
-                "--entropy_beta_pose", "1."
+                "--pose_hypotheses", "100",
+                "--layers_posedsac", "1000", "700", "700", "700", 
+                //"--layers_posedsac", "200", "300", "200",
+                "--entropy_beta_pose", "1.",
+                "--body_lengths_mode", "1",
+                "--pose_batch_size", "16",
+                "--weighted_selection"
             ]
         }
     ]

@@ -77,6 +77,12 @@ def parse_args():
     parser.add_argument('--storeinterval', '-si', type=int, default=1000,
         help='store network weights and a prediction vizualisation every x training iterations')
 
+    parser.add_argument('--body_lengths_mode', type=int, default=0,
+        help='0 - use keypoints only, 1 - along with body lengths, 2 - body lengths only')
+
+    parser.add_argument('--pose_batch_size', type=int, default=16,
+        help='number of frames after which the gradients are applied')
+
     parser.add_argument('--posedsac_only', dest='posedsac_only', action='store_true')
 
     parser.add_argument('--camdsac_only', dest='camdsac_only', action='store_true')
@@ -85,8 +91,13 @@ def parse_args():
 
     parser.add_argument('--hard', dest='hard', action='store_true')
 
+    parser.add_argument('--use_body_lengths', dest='use_body_lengths', action='store_true')
+
     parser.add_argument('--entropy_to_scores', dest='entropy_to_scores', action='store_true',
         help='minimize entropy directly on scores, not softmaxed scores')
+
+    parser.add_argument('--weighted_selection', dest='weighted_selection', action='store_true',
+        help='weighted selection (regression) instead of probabilistic selection (generative)')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 

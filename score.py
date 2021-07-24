@@ -21,8 +21,6 @@ def create_camera_nn(input_size=50*17, hidden_layer_sizes=[700, 500, 300, 300, 1
     return nn.Sequential(*layers)
 
 
-# TODO: Add residual blocks (check simple-yet-effective paper).
-# TODO: Check SYE paper to see how they normalize inputs.
 def create_pose_nn(input_size=17*3, hidden_layer_sizes=[50, 50, 50], out_size=1):
     layers = [
         nn.Linear(input_size, hidden_layer_sizes[0]),

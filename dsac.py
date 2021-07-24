@@ -8,6 +8,7 @@ import itertools
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
+from mvn.utils.vis import CONNECTIVITY_DICT
 from loss import cross_entropy_loss
 
 
@@ -238,8 +239,9 @@ class PoseDSAC(DSAC):
     Differentiable RANSAC for pose triangulation.
     '''
 
-    def __init__(self, hyps, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, score_nn, loss_function, scale=None, device='cpu'):
+    def __init__(self, hyps, num_joints, entropy_beta, min_entropy, entropy_to_scores,
+            temp, gumbel, hard, body_lengths_mode, weighted_selection,
+            score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
         hyps -- number of hypotheses (trials) for each PoseDSAC iteration
@@ -248,6 +250,7 @@ class PoseDSAC(DSAC):
         device --- 'cuda' or 'cpu'
         '''
         self.hyps = hyps
+        self.num_joints = num_joints
 
         self.entropy_beta = entropy_beta
         self.min_entropy = min_entropy
@@ -256,6 +259,9 @@ class PoseDSAC(DSAC):
         self.temp = temp
         self.gumbel = gumbel
         self.hard = hard
+        self.weighted_selection = weighted_selection
+
+        self.body_lengths_mode = body_lengths_mode
 
         self.score_nn = score_nn
         self.loss_function = loss_function
@@ -265,7 +271,16 @@ class PoseDSAC(DSAC):
     def __prepare_projection_matrix(K, R, t):
         return K @ torch.cat((R, t), dim=1)
 
-    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts):
+    def __triangulate_joint(self, est_2d_pose, joint_idx, Ks, Rs, ts, cidxs):
+        Ps = torch.stack(
+            [self.__prepare_projection_matrix(Ks[x], Rs[x], ts[x]) for x in cidxs], 
+            dim=0
+        )
+        points_2d = torch.stack([est_2d_pose[x] for x in cidxs], dim=0)[:, joint_idx]
+
+        return triangulate_point_from_multiple_views_linear_torch(Ps, points_2d)
+
+    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts, baseline=False):
         '''
         Select a random subset of point correspondences and calculate R and t.
 
@@ -280,40 +295,64 @@ class PoseDSAC(DSAC):
         # Select indexes for view combination subsets.
         all_view_combinations = []
         for l in range(2, num_cameras + 1):
+        #for l in range(3, num_cameras + 1):
             all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
         selected_combination_idxs = np.random.choice(
-            np.arange(len(all_view_combinations)), size=num_joints)
+            np.arange(len(all_view_combinations)), size=num_joints,
+            #p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
+            p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
 
         # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
+        baseline_pose = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device) \
+            if baseline else None
+
         for joint_idx in range(num_joints):
             cidxs = all_view_combinations[selected_combination_idxs[joint_idx]]
-            Ps = torch.stack(
-                [self.__prepare_projection_matrix(Ks[x], Rs[x], ts[x]) for x in cidxs], 
-                dim=0
+            all_views_cidxs = all_view_combinations[-1]
+
+            pose_3d[joint_idx] = self.__triangulate_joint(
+                est_2d_pose, joint_idx, Ks, Rs, ts, cidxs
             )
-            points_2d = torch.stack([est_2d_pose[x] for x in cidxs], dim=0)[:, joint_idx]
+            # Do not calculate baseline more than once for efficiency.
+            if baseline:
+                baseline_pose[joint_idx] = self.__triangulate_joint(
+                    est_2d_pose, joint_idx, Ks, Rs, ts, all_views_cidxs
+                )
 
-            pose_3d[joint_idx] = \
-                triangulate_point_from_multiple_views_linear_torch(Ps, points_2d)
+        return pose_3d, baseline_pose
 
-        return pose_3d
-
-    def __score_nn(self, est_3d_pose):
+    def __score_nn(self, est_3d_pose, mean, std):
         '''
         Feed 3D pose coordinates into ScoreNN to obtain score for the hyp.
 
         est_3d_pose
         '''
+        # Standardize pose.
+        est_3d_pose_norm = ((est_3d_pose - mean) / std)
 
-        # Normalize and invert line distance values for NN.
-        #model_input = line_dists / line_dists.max()
-        #model_input = 1 - model_input
+        # Zero-center around hip joint.
+        est_3d_pose_norm = est_3d_pose_norm - est_3d_pose_norm[0]
 
-        return self.score_nn(est_3d_pose.flatten().cuda())
+        # Extract body part lengths.
+        if self.body_lengths_mode == 1 or self.body_lengths_mode == 2:
+            connections = CONNECTIVITY_DICT['human36m']
+            lengths = []
+            for (kpt1, kpt2) in connections:
+                lengths.append(torch.norm(est_3d_pose_norm[kpt1] - est_3d_pose_norm[kpt2]))
+            lengths = torch.stack(lengths, dim=0)
 
-    # TODO: Update this to work in parallel for all batches.
-    def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d):
+        # Select network input based on body lengths mode.
+        if self.body_lengths_mode == 0:
+            network_input = est_3d_pose_norm.flatten()
+        elif self.body_lengths_mode == 1:
+            network_input = torch.cat((est_3d_pose_norm.flatten(), lengths), dim=0)
+        elif self.body_lengths_mode == 2:
+            network_input = lengths
+
+        return self.score_nn(network_input.cuda())
+
+    def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d, mean, std):
         '''
         Perform robust, differentiable triangulation.
 
@@ -325,7 +364,7 @@ class PoseDSAC(DSAC):
         '''
         hyp_losses = torch.zeros([self.hyps, 1], device=self.device)                   # hyp losses
         hyp_scores = torch.zeros([self.hyps, 1], device=self.device)                   # hyp scores
-
+        hyps_3d = torch.zeros([self.hyps, self.num_joints, 3], device=self.device)
         
         best_loss_loss = 1000           # this one is a reference
         best_loss_score = 0
@@ -333,22 +372,29 @@ class PoseDSAC(DSAC):
         best_score_loss = 0
         best_score_score = 0            # this one is a reference
 
+        baseline = None
         selected_pose = None
 
         for h in range(0, self.hyps):
 
             # === Step 1: Sample hypothesis ===========================
-            triang_3d = self.__sample_hyp(est_2d_pose, Ks, Rs, ts)
+            calculate_baseline = True if baseline is None else False
+            sample_tuple = self.__sample_hyp(est_2d_pose, Ks, Rs, ts, calculate_baseline)
+            sample = sample_tuple[0]
 
             # === Step 2: Score hypothesis using soft inlier count ====
-            score = self.__score_nn(triang_3d)
+            score = self.__score_nn(sample, mean, std)
 
             # === Step 3: Calculate loss of hypothesis ================
-            loss = self.loss_function(triang_3d, gt_3d)
+            if baseline is None:
+                baseline = sample_tuple[1]
+                baseline_loss = self.loss_function(baseline, gt_3d)
+            loss = self.loss_function(sample, gt_3d)
 
             # Store results.
             hyp_losses[h] = loss
             hyp_scores[h] = score
+            hyps_3d[h] = sample
 
             # Keep track of best hypotheses with respect to loss and score.
             if loss < best_loss_loss:
@@ -358,7 +404,7 @@ class PoseDSAC(DSAC):
             if score > best_score_score:
                 best_score_loss = loss
                 best_score_score = score
-                selected_pose = triang_3d
+                selected_pose = sample
         
         best_loss = (best_loss_loss, best_loss_score)
         best_score = (best_score_loss, best_score_score)
@@ -371,19 +417,35 @@ class PoseDSAC(DSAC):
         else:  
             hyp_scores_softmax = F.softmax(hyp_scores / self.temp, dim=0)
 
-        # Loss expectation.
-        if self.entropy_to_scores:
-            softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+        # Calculate metrics.
+        hyp_losses_sorted, _ = torch.sort(hyp_losses, dim=0)
+        hyp_rank = (hyp_losses_sorted == best_score_loss).nonzero(as_tuple=True)[0].float()
+        _, hyp_scores_sorted_idxs = torch.sort(hyp_scores, dim=0, descending=True)
+        hyp_losses_sorted_by_scores = hyp_losses[hyp_scores_sorted_idxs[:, 0]]
+        top_loss = hyp_losses_sorted_by_scores[:5].mean()
+        bottom_loss = hyp_losses_sorted_by_scores[-5:].mean()
+
+        if self.weighted_selection:
+            #final_pose = torch.mean(hyps_3d * hyp_scores_softmax, axis=0)
+            final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+            for hidx in range(self.hyps):
+                final_pose += hyps_3d[hidx] * hyp_scores_softmax[hidx, 0]
+            final_pose /= self.hyps
+            return self.loss_function(final_pose, gt_3d), best_loss
         else:
+            # Entropy loss.
+            if self.entropy_to_scores:
+                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+            else:
+                softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
+
+            # Loss expectation.
+            hyp_losses /= hyp_losses.max()
             softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
-        # Loss expectation.
-        hyp_losses /= hyp_losses.max()
-        softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
+            exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
+            entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
-        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
+            total_loss = exp_loss + self.entropy_beta * softmax_entropy
 
-        total_loss = exp_loss + self.entropy_beta * softmax_entropy
-
-        return total_loss, exp_loss, entropy_loss, selected_pose, best_loss, best_score
+            return total_loss, exp_loss, entropy_loss, baseline_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss

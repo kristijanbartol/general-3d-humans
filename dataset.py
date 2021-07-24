@@ -88,7 +88,9 @@ class SparseDataset(Dataset):
             self.gt_3d[sidx] = np.empty((0, num_joints, 3), dtype=np.float32)
             self.bboxes[sidx] = np.empty((0, self.num_cameras, 2, 2), dtype=np.float32)
             fcounter = 0
-            data_files = os.listdir(dirpath)
+
+            all_gt_3d = np.empty((0, 3), dtype=np.float32)
+
             while True:
                 pred_path = os.path.join(dirpath, f'all_2d_preds{fcounter}.npy')
                 gt_path = os.path.join(dirpath, f'all_3d_gt{fcounter}.npy')
@@ -106,6 +108,8 @@ class SparseDataset(Dataset):
                 self.gt_3d[sidx] = np.concatenate((self.gt_3d[sidx], gt_3d), axis=0)
                 self.bboxes[sidx] = np.concatenate((self.bboxes[sidx], bboxes), axis=0)
 
+                all_gt_3d = np.concatenate((all_gt_3d, gt_3d.reshape((-1, 3))), axis=0)
+
                 self.num_poses += self.gt_3d[sidx].shape[0]
                 fcounter += 1
 
@@ -115,7 +119,10 @@ class SparseDataset(Dataset):
                 np.expand_dims(bbox_height / 384., axis=-1), axis=-1)
             self.preds_2d[sidx] += np.expand_dims(self.bboxes[sidx][:, :, 0, :], axis=2)
 
-            # TODO: Obtain GT scale to estimate translation also.
+        self.mean_3d = np.mean(all_gt_3d, axis=0)
+        self.std_3d = np.std(all_gt_3d, axis=0)
+
+        # TODO: Obtain GT scale to estimate translation also.
 
     @staticmethod
     def __load_camera_params(subject_idx, cam_idxs):
