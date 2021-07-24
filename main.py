@@ -10,11 +10,12 @@ from dsac import CameraDSAC, PoseDSAC
 from dataset import SparseDataset, TRAIN, VALID, TEST
 from loss import QuaternionLoss, ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
+from mvn.utils.vis import draw_3d_pose
 from options import parse_args
 
 
-CAM_IDXS = [3, 1]
-#CAM_IDXS = [0, 1, 2, 3]
+#CAM_IDXS = [3, 1]
+CAM_IDXS = [0, 1, 2, 3]
 
 
 if __name__ == '__main__':
@@ -34,15 +35,12 @@ if __name__ == '__main__':
     pose_loss = MPJPELoss()
 
     # Create camera and pose scoring models.
-    camera_nn = create_camera_nn(input_size=opt.num_frames * opt.num_joints, hidden_layer_sizes=opt.layers)
-    pose_nn = create_pose_nn(input_size=opt.num_joints * 3)
+    camera_nn = create_camera_nn(input_size=opt.num_frames * opt.num_joints, hidden_layer_sizes=opt.layers_camdsac)
+    pose_nn = create_pose_nn(input_size=opt.num_joints * 3, hidden_layer_sizes=opt.layers_posedsac)
 
     # Set models for optimization (training).
     if not opt.cpu: camera_nn = camera_nn.cuda()
     if not opt.cpu: pose_nn = pose_nn.cuda()
-
-    #camera_nn.train()
-    #pose_nn.train()
 
     opt_camera_nn = optim.Adam(
         filter(lambda p: p.requires_grad, camera_nn.parameters()), lr=opt.learning_rate)
@@ -57,9 +55,10 @@ if __name__ == '__main__':
 
     # Create DSACs.
     camera_dsac = CameraDSAC(opt.camera_hypotheses, opt.sample_size, opt.inlier_threshold, 
-        opt.inlier_beta, opt.entropy_beta, opt.min_entropy, opt.entropy_to_scores, 
+        opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
         opt.temp, opt.gumbel, opt.hard, camera_nn, camera_loss)
-    pose_dsac = PoseDSAC(opt.pose_hypotheses, pose_nn, pose_loss)
+    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.entropy_beta_pose, opt.min_entropy, opt.entropy_to_scores,
+        opt.temp, opt.gumbel, opt.hard, pose_nn, pose_loss)
 
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,
@@ -162,26 +161,28 @@ if __name__ == '__main__':
 
             ################ PoseDSAC #####################
             if not opt.camdsac_only:
-                # TODO: Currently using known intrinsics.
                 Ks = gt_Ks
 
-                start_time = time.time()
-                total_pose_exp_loss = 0
-                for b in range(est_2d.shape[0]):
-                    pose_exp_loss, pose_entropy, est_3d_pose, best_per_loss, best_per_score = pose_dsac(est_2d[b], Ks, Rs, ts, gt_3d[b])
-                    total_pose_exp_loss += pose_exp_loss
+                avg_total_loss = 0
+                num_frames = est_2d.shape[0]
+                for fidx in range(num_frames):
+                    total_loss, exp_loss, entropy_loss, est_3d_pose, best_per_loss, best_per_score = pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx])
+                    avg_total_loss += total_loss
 
-                    print(f'Iteration: {iteration}, Expected Loss: {pose_exp_loss:.4f}, (Time: {end_time:.2f}s)\n'
+                    print(f'Iteration: {iteration} ({fidx + 1}/{num_frames} frames), Expectation Loss: {exp_loss:.4f}, Entropy Loss: {entropy_loss:.4f}\n'
                         f'\tBest (per) Loss: ({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n' 
                         f'\tBest (per) Score: ({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f})',
                         flush=True
                     )
 
-                total_pose_exp_loss.backward()
-                opt_pose_nn.step()
-                opt_pose_nn.zero_grad()
+                    # TODO: Create a grid of subplots to plot est_3d_pose for all frames (and corresponding GT).
 
-                end_time = time.time() - start_time
+                    #avg_total_loss /= num_frames
+                    avg_total_loss = total_loss
+
+                    avg_total_loss.backward()
+                    opt_pose_nn.step()
+                    opt_pose_nn.zero_grad()
             ################################################
         print(f'End of epoch #{epoch_idx + 1} (validation - CamDSAC). SCORE={train_score}\n')
 

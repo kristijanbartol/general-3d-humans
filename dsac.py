@@ -238,7 +238,8 @@ class PoseDSAC(DSAC):
     Differentiable RANSAC for pose triangulation.
     '''
 
-    def __init__(self, hyps, score_nn, loss_function, device='cpu'):
+    def __init__(self, hyps, entropy_beta, min_entropy, entropy_to_scores,
+            temp, gumbel, hard, score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
         hyps -- number of hypotheses (trials) for each PoseDSAC iteration
@@ -247,6 +248,15 @@ class PoseDSAC(DSAC):
         device --- 'cuda' or 'cpu'
         '''
         self.hyps = hyps
+
+        self.entropy_beta = entropy_beta
+        self.min_entropy = min_entropy
+        self.entropy_to_scores = entropy_to_scores
+
+        self.temp = temp
+        self.gumbel = gumbel
+        self.hard = hard
+
         self.score_nn = score_nn
         self.loss_function = loss_function
         self.device = device
@@ -267,12 +277,14 @@ class PoseDSAC(DSAC):
         num_cameras = est_2d_pose.shape[0]
         num_joints = est_2d_pose.shape[1]
 
+        # Select indexes for view combination subsets.
         all_view_combinations = []
         for l in range(2, num_cameras + 1):
             all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
         selected_combination_idxs = np.random.choice(
             np.arange(len(all_view_combinations)), size=num_joints)
 
+        # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
         for joint_idx in range(num_joints):
             cidxs = all_view_combinations[selected_combination_idxs[joint_idx]]
@@ -282,7 +294,6 @@ class PoseDSAC(DSAC):
             )
             points_2d = torch.stack([est_2d_pose[x] for x in cidxs], dim=0)[:, joint_idx]
 
-            # TODO: Pass confidences here when NG-RANSAC is implemented.
             pose_3d[joint_idx] = \
                 triangulate_point_from_multiple_views_linear_torch(Ps, points_2d)
 
@@ -299,7 +310,7 @@ class PoseDSAC(DSAC):
         #model_input = line_dists / line_dists.max()
         #model_input = 1 - model_input
 
-        return 1 - self.score_nn(est_3d_pose.flatten().cuda())
+        return self.score_nn(est_3d_pose.flatten().cuda())
 
     # TODO: Update this to work in parallel for all batches.
     def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d):
@@ -340,7 +351,6 @@ class PoseDSAC(DSAC):
             hyp_scores[h] = score
 
             # Keep track of best hypotheses with respect to loss and score.
-            # TODO: Simplify this by taking argmax for each reference variable.
             if loss < best_loss_loss:
                 best_loss_loss = loss
                 best_loss_score = score
@@ -356,13 +366,24 @@ class PoseDSAC(DSAC):
         # === Step 4: calculate the expectation ===========================
 
         # Softmax distribution from hypotheses scores.
-        hyp_scores_softmax = F.softmax(hyp_scores, dim=0)
+        if self.gumbel:
+            hyp_scores_softmax = F.gumbel_softmax(hyp_scores, tau=self.temp, hard=self.hard, dim=0)
+        else:  
+            hyp_scores_softmax = F.softmax(hyp_scores / self.temp, dim=0)
+
+        # Loss expectation.
+        if self.entropy_to_scores:
+            softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+        else:
+            softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
         # Loss expectation.
         hyp_losses /= hyp_losses.max()
         softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
-        #exp_loss = torch.sum(hyp_losses * hyp_scores_softmax) + 0.5 * softmax_entropy
         exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
+        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-        return exp_loss, softmax_entropy, selected_pose, best_loss, best_score
+        total_loss = exp_loss + self.entropy_beta * softmax_entropy
+
+        return total_loss, exp_loss, entropy_loss, selected_pose, best_loss, best_score
