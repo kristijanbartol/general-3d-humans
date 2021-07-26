@@ -299,8 +299,8 @@ class PoseDSAC(DSAC):
             all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
         selected_combination_idxs = np.random.choice(
             np.arange(len(all_view_combinations)), size=num_joints,
-            #p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
-            p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
+            p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
+            #p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
 
         # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
@@ -420,17 +420,26 @@ class PoseDSAC(DSAC):
         # Calculate metrics.
         hyp_losses_sorted, _ = torch.sort(hyp_losses, dim=0)
         hyp_rank = (hyp_losses_sorted == best_score_loss).nonzero(as_tuple=True)[0].float()
-        _, hyp_scores_sorted_idxs = torch.sort(hyp_scores, dim=0, descending=True)
+        hyp_scores_sorted, hyp_scores_sorted_idxs = torch.sort(hyp_scores, dim=0, descending=True)
         hyp_losses_sorted_by_scores = hyp_losses[hyp_scores_sorted_idxs[:, 0]]
         top_loss = hyp_losses_sorted_by_scores[:5].mean()
         bottom_loss = hyp_losses_sorted_by_scores[-5:].mean()
 
+        # Weighted selection.
+        final_pose_top = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+        for hidx in range(10):
+            #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
+            final_pose_top += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
+        final_pose_top /= hyp_scores_sorted[:10].sum()
+        weighted_error_top = torch.mean(torch.norm(final_pose_top - gt_3d, p=2, dim=1))
+
+        final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+        for hidx in range(self.hyps):
+            #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
+            final_pose += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
+        final_pose /= hyp_scores_sorted.sum()
+        weighted_error = torch.mean(torch.norm(final_pose - gt_3d, p=2, dim=1))
         if self.weighted_selection:
-            #final_pose = torch.mean(hyps_3d * hyp_scores_softmax, axis=0)
-            final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
-            for hidx in range(self.hyps):
-                final_pose += hyps_3d[hidx] * hyp_scores_softmax[hidx, 0]
-            final_pose /= self.hyps
             return self.loss_function(final_pose, gt_3d), best_loss
         else:
             # Entropy loss.
@@ -446,6 +455,7 @@ class PoseDSAC(DSAC):
             exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
             entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-            total_loss = exp_loss + self.entropy_beta * softmax_entropy
+            #total_loss = exp_loss + self.entropy_beta * softmax_entropy
+            total_loss = exp_loss + self.entropy_beta * softmax_entropy + weighted_error / 20.
 
-            return total_loss, exp_loss, entropy_loss, baseline_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
+            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss

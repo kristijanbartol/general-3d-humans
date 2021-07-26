@@ -80,7 +80,6 @@ if __name__ == '__main__':
                             num_workers=0, batch_size=None)
 
     for epoch_idx in range(opt.num_epochs):
-        print('############## TRAIN ################')
         train_score = 0
         camera_nn.train()
         pose_nn.train()
@@ -88,9 +87,12 @@ if __name__ == '__main__':
         # Init PoseDSAC metrics.
         ranks = []          # hypotheses ranks
         mpjpes = []         # MPJPEs of the hypotheses
-        diffs = []          # difference between the hypothesis MPJPE and best MPJPE
+        diffs_to_best = []          # difference between the hypothesis MPJPE and best MPJPE
+        diffs_to_baseline = []          # difference between the hypothesis MPJPE and best MPJPE
         top_losses = []     # losses of top hypotheses
         bottom_losses = []  # losses of worst hypotheses
+
+        print('############## TRAIN ################')
 
         for iteration, batch_items in enumerate(train_dataloader):
             if iteration % opt.temp_step == 0 and iteration != 0:
@@ -192,36 +194,41 @@ if __name__ == '__main__':
                         total_loss, best_per_loss = pose_result
                         print(total_loss.item(), best_per_loss[0].item())
                     else:
-                        total_loss, exp_loss, entropy_loss, baseline_loss, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
 
                         # Update metrics.
                         mpjpe = best_per_score[0]
-                        diff = torch.abs(best_per_score[0] - best_per_loss[0])
+                        diff_to_best = weighted_error - best_per_loss[0]
+                        diff_to_baseline = weighted_error - baseline_loss
 
                         if len(ranks) == 100:
                             ranks[:-1] = ranks[1:]; ranks[-1] = rank
                             mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                            diffs[:-1] = diffs[1:]; diffs[-1] = diff
+                            diffs_to_best[:-1] = diffs_to_best[1:]; diffs_to_best[-1] = diff_to_best
+                            diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
                             top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
                             bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
                         else:
                             ranks.append(rank)
                             mpjpes.append(mpjpe)
-                            diffs.append(diff)
+                            diffs_to_best.append(diff_to_best)
+                            diffs_to_baseline.append(diff_to_baseline)
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                        mean_diff = torch.stack(diffs, dim=0).mean()
+                        mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
+                        mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean() # .............
                         mean_top_loss = torch.stack(top_losses, dim=0).mean()
                         mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
                         # Log to stdout.
-                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), Expectation Loss: {exp_loss:.4f}, Entropy Loss: {entropy_loss:.4f} [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff: {mean_diff:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
                             f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
                             f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
-                            f'\tBaseline Loss: \t\t({baseline_loss:.4f})',
+                            f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
+                            f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
                             flush=True
                         )
 
@@ -286,15 +293,70 @@ if __name__ == '__main__':
                         f'\tBest (per) Line Dist: \t(\t{best_per_line_dist[0].item():.4f}, \t{best_per_line_dist[1].item():.4f}, \t{best_per_line_dist[2].item():.4f}, \t{best_per_line_dist[3].item():.4f})', 
                         flush=True
                     )
+            else:
+                Rs = gt_Rs
+                ts = gt_ts
             #############
             
             # PoseDSAC. #
-            ...
+            # Init PoseDSAC metrics.
+            ranks = []              # hypotheses ranks
+            mpjpes = []             # MPJPEs of the hypotheses
+            diffs_to_best = []      # difference between the hypothesis MPJPE and best MPJPE
+            diffs_to_baseline = []  # difference between the hypothesis MPJPE and all-view triangulation (baseline)
+            top_losses = []         # losses of top hypotheses
+            bottom_losses = []      # losses of worst hypotheses
+
+            if not opt.camdsac_only:
+                Ks = gt_Ks
+                num_frames = est_2d.shape[0]
+
+                for fidx in range(num_frames):
+                    pose_result = \
+                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d)
+
+                    if opt.weighted_selection:
+                        total_loss, best_per_loss = pose_result
+                        print(total_loss.item(), best_per_loss[0].item())
+                    else:
+                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+
+                        # Update metrics.
+                        mpjpe = best_per_score[0]
+                        diff_to_best = weighted_error - best_per_loss[0]
+                        diff_to_baseline = weighted_error - baseline_loss
+
+                        if len(ranks) == 100:
+                            ranks[:-1] = ranks[1:]; ranks[-1] = rank
+                            mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
+                            diffs_to_best[:-1] = diffs_to_best[1:]; diffs_to_best[-1] = diff_to_best
+                            diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
+                            top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
+                            bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
+                        else:
+                            ranks.append(rank)
+                            mpjpes.append(mpjpe)
+                            diffs_to_best.append(diff_to_best)
+                            diffs_to_baseline.append(diff_to_baseline)
+                            top_losses.append(top_loss)
+                            bottom_losses.append(bottom_loss)
+
+                        mean_rank = torch.stack(ranks, dim=0).mean()
+                        mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
+                        mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
+                        mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean() # .............
+                        mean_top_loss = torch.stack(top_losses, dim=0).mean()
+                        mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
+
+                        # Log to stdout.
+                        print(f'[VALIDATION] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                            f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
+                            f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
+                            f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
+                            f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
+                            flush=True
+                        )
             #############
-
-        print(f'End of epoch #{epoch_idx + 1} (validation - CamDSAC). SCORE={valid_score}\n')
-
         ################################################
-
 
     train_log.close()
