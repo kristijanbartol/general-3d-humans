@@ -54,6 +54,7 @@ class SparseDataset(Dataset):
         num_iterations --- number of iterations per epoch, i.e. length of the dataset
         '''
         self.sidxs = SET_SIDXS_MAP[data_type]
+        self.data_type = data_type
 
         # Initialize data for each subject.
         self.Ks = dict.fromkeys(self.sidxs)
@@ -149,9 +150,12 @@ class SparseDataset(Dataset):
         return Ks, Rs, ts
 
     def __len__(self):
-        return self.num_iterations
+        if self.data_type == TEST:
+            # 40
+            return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
+        else:
+            return self.num_iterations
 
-    # NOTE: Not using idx, might not need DataLoader.
     def __getitem__(self, idx):
         '''
         Get random subset of point correspondences from the preset number of frames.
@@ -164,44 +168,34 @@ class SparseDataset(Dataset):
         batch_Rs -- [Cx2x3x3]
         batch_ts -- [Cx2x3x1]
         '''
-        rand_idx = random.randint(0, len(self.sidxs) - 1)
-        rand_sidx = self.sidxs[rand_idx]
+        if self.data_type == TEST:
+            first_frame = idx * self.num_frames
+            last_frame = (idx + 1) * self.num_frames
+            subject_nine_frames = self.preds_2d[9].shape[0]
+            sidx = 9 if last_frame < subject_nine_frames else 11
+            first_frame = first_frame if sidx == 9 else first_frame - subject_nine_frames
+            last_frame = last_frame if sidx == 9 else last_frame - subject_nine_frames
 
-        # Selecting a subset of frames.
-        selected_frames = np.random.choice(
-            np.arange(self.preds_2d[rand_sidx].shape[0]), size=self.num_frames)
+            selected_frames = np.arange(first_frame, last_frame)
+        else:
+            rand_idx = random.randint(0, len(self.sidxs) - 1)
+            sidx = self.sidxs[rand_idx]
+
+            # Selecting a subset of frames.
+            selected_frames = np.random.choice(
+                np.arange(self.preds_2d[sidx].shape[0]), size=self.num_frames)
 
         # Select 2D predictions, 3D GT, and camera parameters 
         # for a given random subject and selected frames.
-        selected_preds = self.preds_2d[rand_sidx][selected_frames]
-        selected_gt_3d = self.gt_3d[rand_sidx][selected_frames]
-        Ks = self.Ks[rand_sidx]
-        Rs = self.Rs[rand_sidx]
-        ts = self.ts[rand_sidx]
+        selected_preds = self.preds_2d[sidx][selected_frames]
+        selected_gt_3d = self.gt_3d[sidx][selected_frames]
+        Ks = self.Ks[sidx]
+        Rs = self.Rs[sidx]
+        ts = self.ts[sidx]
 
         # All points stacked along a single dimension for a single subject.
         point_corresponds = np.concatenate(
             np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0]
-        # TODO: This can be simplified by removing dimension.
-        #selected_3d_gt = selected_gt_3d.reshape(-1, 3)
-
-        '''
-        batch_point_corresponds = []
-        batch_Ks = []
-        batch_Rs = []
-        batch_ts = []
-        for cam_idx in range(len(self.cam_idxs) - 1):
-            # NOTE: C = # cameras = batch dimension --- use batch dim to stack camera pairs.
-            # batch_point_corresponds: CxPx2x2
-            batch_point_corresponds.append(
-                np.stack([point_corresponds[:, 0], point_corresponds[:, cam_idx + 1]], axis=1))
-            # batch_Ks: Cx2x3x3
-            batch_Ks.append(np.stack([Ks[0], Ks[cam_idx + 1]], axis=0))
-            # batch_Ks: Cx2x3x3
-            batch_Rs.append(np.stack([Rs[0], Rs[cam_idx + 1]], axis=0))
-            # batch_Ks: Cx2x3x1
-            batch_ts.append(np.stack([ts[0], ts[cam_idx + 1]], axis=0))
-        '''
 
         point_corresponds = torch.from_numpy(np.array(point_corresponds))
         selected_preds = torch.from_numpy(selected_preds) 

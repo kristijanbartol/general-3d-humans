@@ -33,7 +33,10 @@ def parse_args():
     parser.add_argument('--num_frames', type=int, default=50,
         help='number of frames used for camera autocalibration in each iteration')
 
-    parser.add_argument('--num_iterations', '-ti', type=int, default=50,
+    parser.add_argument('--train_iterations', type=int, default=50,
+        help='number of training iterations per epoch (= dataset length)')
+
+    parser.add_argument('--valid_iterations', type=int, default=50,
         help='number of training iterations per epoch (= dataset length)')
 
     parser.add_argument('--num_epochs', '-e', type=int, default=100,
@@ -98,6 +101,12 @@ def parse_args():
 
     parser.add_argument('--weighted_selection', dest='weighted_selection', action='store_true',
         help='weighted selection (regression) instead of probabilistic selection (generative)')
+
+    parser.add_argument('--test', dest='test', action='store_true',
+        help='whether to test on test set')
+
+    parser.add_argument('--filter_bad', dest='filter_bad', action='store_true',
+        help='if using test, whether to filter bad 3D GT')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 
