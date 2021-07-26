@@ -3,12 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
-import time
-import copy
 
 from dsac import CameraDSAC, PoseDSAC
 from dataset import SparseDataset, TRAIN, VALID, TEST
-from loss import QuaternionLoss, ReprojectionLoss3D, MPJPELoss
+from loss import ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
 from mvn.utils.vis import draw_3d_pose, CONNECTIVITY_DICT
 from options import parse_args
@@ -20,10 +18,12 @@ CAM_IDXS = [0, 1, 2, 3]
 
 if __name__ == '__main__':
     # Parse command line args.
-    opt, sid = parse_args()
+    opt, session_id, hyperparams_string = parse_args()
 
-    # Keep track of training progress.
-    train_log = open(os.path.join('logs', f'log_{sid}.txt'), 'w', 1)
+    # Keep track of learning progress.
+    logger = open(os.path.join('logs', f'{session_id}.txt'), 'w', 1)
+    logger.write(f'{hyperparams_string}\n\n')
+    logger.write('Iter\tTrain\t\tValid\t\tTest\t\tBaseline\n')
 
     # Create datasets.
     train_set = SparseDataset(opt.rootdir, TRAIN, CAM_IDXS, opt.num_joints, opt.num_frames, opt.train_iterations)
@@ -80,7 +80,7 @@ if __name__ == '__main__':
                             num_workers=0, batch_size=None)
 
     for epoch_idx in range(opt.num_epochs):
-        train_score = 0
+        camera_score = 0
         camera_nn.train()
         pose_nn.train()
 
@@ -91,6 +91,10 @@ if __name__ == '__main__':
         diffs_to_baseline = []          # difference between the hypothesis MPJPE and best MPJPE
         top_losses = []     # losses of top hypotheses
         bottom_losses = []  # losses of worst hypotheses
+
+        all_mean_mpjpe = 0.
+        min_mean_mpjpe = 100.
+        log_line = ''
 
         print('############## TRAIN ################')
 
@@ -137,14 +141,12 @@ if __name__ == '__main__':
                     Rs.append(est_params[0])
                     ts.append(est_params[1])
 
-                    #total_loss.retain_grad()
                     total_losses.append(total_loss)
-                    #loss_gradients.append(total_loss.backward())
 
                     if best_per_score[0] < best_per_line_dist[0]:
-                        train_score += 1
+                        camera_score += 1
                     elif best_per_score[0] > best_per_line_dist[0]:
-                        train_score -= 1
+                        camera_score -= 1
 
                     print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration}, Total Loss: {total_loss.item():.4f}, Expectation loss: {exp_loss:.4f}, Entropy loss: {entropy_loss:.4f}, [LR: {opt.learning_rate}, Temp: {opt.temp:.2f}]\n'
                         f'\tBest (per) Loss: \t(\t{best_per_loss[0].item():.4f}, \t{best_per_loss[1].item():.4f}, \t{best_per_loss[2].item():.4f}, \t{best_per_loss[3].item():.4f}) \n' 
@@ -216,6 +218,8 @@ if __name__ == '__main__':
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
+                        all_mean_mpjpe += mpjpe
+
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
                         mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
@@ -241,7 +245,10 @@ if __name__ == '__main__':
 
                         avg_total_loss = 0
             ################################################
-        print(f'End of epoch #{epoch_idx + 1} (validation - CamDSAC). SCORE={train_score}\n')
+        mean_mpjpe = all_mean_mpjpe / (num_frames * train_set.num_iterations)
+        print(f'Train epoch finished. Mean MPJPE: {mean_mpjpe}, Camera score: {camera_score}')
+
+        log_line += f'{epoch_idx}\t\t{mean_mpjpe:.4f}\t\t'
 
         print('############## VALIDATION #################')
         valid_score = 0
@@ -363,8 +370,33 @@ if __name__ == '__main__':
                             f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
                             flush=True
                         )
-            print(f'Validation finished. Mean MPJPE: {all_mean_mpjpe / num_frames}')
             #############
+
+        mean_mpjpe = all_mean_mpjpe / (num_frames * valid_set.num_iterations)
+        print(f'Validation finished. Mean MPJPE: {mean_mpjpe}')
+
+        log_line += f'{mean_mpjpe:.4f}\t\t'
+
+        if mean_mpjpe < min_mean_mpjpe:
+            min_mean_mpjpe = mean_mpjpe
+            torch.save({
+                'epoch': epoch_idx,
+                'camera_nn_state_dict': camera_nn.state_dict(),
+                'opt_camera_nn_state_dict': opt_camera_nn.state_dict(),
+                'pose_nn_state_dict': pose_nn.state_dict(),
+                'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
+                }, 
+                f'models/{session_id}_best.pt'
+            )
+        torch.save({
+            'epoch': epoch_idx,
+            'camera_nn_state_dict': camera_nn.state_dict(),
+            'opt_camera_nn_state_dict': opt_camera_nn.state_dict(),
+            'pose_nn_state_dict': pose_nn.state_dict(),
+            'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
+            }, 
+            f'models/{session_id}_last.pt'
+        )
         ################################################
 
         if opt.test:
@@ -373,7 +405,8 @@ if __name__ == '__main__':
             camera_nn.eval()
             pose_nn.eval()
 
-            all_mean_mpjpe = 0
+            all_mpjpes = 0
+            all_baselines = 0
             for iteration, batch_items in enumerate(test_dataloader):
                 # Load sample.
                 corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
@@ -452,7 +485,7 @@ if __name__ == '__main__':
                             diff_to_best = weighted_error - best_per_loss[0]
                             diff_to_baseline = weighted_error - baseline_loss
 
-                            # TODO: This is only temporarily here (for test set).
+
                             if opt.filter_bad:
                                 if mpjpe > 100.:
                                     continue
@@ -472,7 +505,8 @@ if __name__ == '__main__':
                                 top_losses.append(top_loss)
                                 bottom_losses.append(bottom_loss)
 
-                            all_mean_mpjpe += mpjpe
+                            all_mpjpes += mpjpe
+                            all_baselines += baseline_loss
 
                             mean_rank = torch.stack(ranks, dim=0).mean()
                             mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
@@ -482,7 +516,7 @@ if __name__ == '__main__':
                             mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
                             # Log to stdout.
-                            print(f'[TEST] Iteration: {iteration} / {len(test_set)} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                            print(f'[TEST] Iteration: {iteration + 1} / {len(test_set)} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
                                 f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
                                 f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
                                 f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
@@ -490,7 +524,11 @@ if __name__ == '__main__':
                                 flush=True
                             )
                 #############
-            print(f'Test finished. Mean MPJPE: {all_mean_mpjpe / ((test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]))}')
+            num_samples = test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]
+            print(f'Test finished. Mean MPJPE: {(all_mean_mpjpe / num_samples):.4f}')
+
+            log_line += f'{all_mpjpes / num_samples:.4f}\t\t{(all_baselines / num_samples):.4f}'
+            logger.write(f'{log_line}\n')
             ################################################
 
-    train_log.close()
+    logger.close()

@@ -1,4 +1,6 @@
 import argparse
+import json
+from datetime import datetime
 
 
 def parse_args():
@@ -117,8 +119,10 @@ def parse_args():
 
     opt = parser.parse_args()
 
-    if len(opt.session) > 0:
-        opt.session = '_' + opt.session
-    sid = f'chyps{opt.camera_hypotheses}_cphyps{opt.pose_hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
+    #if len(opt.session) > 0:
+    #    opt.session = '_' + opt.session
+    #sid = f'chyps{opt.camera_hypotheses}_cphyps{opt.pose_hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
+    session_id = datetime.now().strftime('%d-%b-%Y_%H:%M:%S')
+    hyperparams_string = json.dumps(vars(opt), indent=4)
 
-    return opt, sid
+    return opt, session_id, hyperparams_string

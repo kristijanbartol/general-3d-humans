@@ -152,7 +152,8 @@ class SparseDataset(Dataset):
     def __len__(self):
         if self.data_type == TEST:
             # 40
-            return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
+            #return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
+            return 2
         else:
             return self.num_iterations
 

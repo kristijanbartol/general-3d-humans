@@ -25,7 +25,7 @@
                 "--temp_gamma", "0.9",
 
                 "--train_iterations", "10",
-                "--valid_iterations", "0",
+                "--valid_iterations", "5",
 
                 "--pose_hypotheses", "100",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
