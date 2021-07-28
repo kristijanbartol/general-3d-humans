@@ -2,6 +2,7 @@ import torch
 import kornia
 
 from mvn.utils.multiview import evaluate_projection, evaluate_reconstruction
+from metrics import rel_mpjpe
 
 
 def cross_entropy_loss(est, gt):
@@ -65,4 +66,9 @@ class MPJPELoss():
         est_3d -- triangulated 3D pose
         gt_3d -- GT 3D pose
         '''
-        return torch.mean(torch.norm(est_3d - gt_3d, p=2, dim=1))
+        '''
+        est_3d_centered = est_3d - est_3d[6, :]
+        gt_3d_centered = gt_3d - gt_3d[6, :]
+        return torch.mean(torch.norm(est_3d_centered - gt_3d_centered, p=2, dim=1))
+        '''
+        return rel_mpjpe(est_3d, gt_3d)

@@ -12,14 +12,15 @@
             "console": "integratedTerminal",
             "args": [
                 "--posedsac_only",
+                //"--camdsac_only",
 
-                "--layers_camdsac", "200", "300", "200",
+                "--layers_camdsac", "700", "500", "300", "300",
 
                 "--temp", "1.8",
                 "--gumbel",
-                "--entropy_beta_cam", "1.",
+                "--entropy_beta_cam", ".01",
                 "--entropy_to_scores",
-                "-lr", "0.001",
+                "-lr", "0.0005",
                 "-lrs", "10",
                 "-ts", "5",
                 "--temp_gamma", "0.9",
@@ -27,7 +28,7 @@
                 "--train_iterations", "10",
                 "--valid_iterations", "5",
 
-                "--pose_hypotheses", "100",
+                "--pose_hypotheses", "200",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
                 //"--layers_posedsac", "200", "300", "200",
                 "--entropy_beta_pose", "1.",
@@ -36,7 +37,7 @@
                 //"--weighted_selection"
 
                 "--test",
-                "--filter_bad",
+                //"--filter_bad",
             ]
         }
     ]

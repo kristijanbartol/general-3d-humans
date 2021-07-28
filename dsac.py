@@ -9,7 +9,7 @@ import itertools
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
 from mvn.utils.vis import CONNECTIVITY_DICT
-from loss import cross_entropy_loss
+from metrics import rel_mpjpe
 
 
 class DSAC:
@@ -153,8 +153,12 @@ class CameraDSAC(DSAC):
         hyp_losses = torch.ones([self.hyps, 1], device=self.device) * 100.        # loss of each hypothesis
         hyp_scores = torch.zeros([self.hyps, 1], device=self.device)              # score of each hypothesis
         line_dists = torch.ones([self.hyps, 1], device=self.device) * 1000.       # list of all line dists
+        
+        #Rs_hyps = torch.zeros([self.hyps, 3, 3], device=self.device)
+        #ts_hyps = torch.zeros([self.hyps, 3, 1], device=self.device)
 
         max_score = 0.
+        min_line_dist = 100.
         selected_params = None
         invalid_hyps = 0
 
@@ -177,10 +181,16 @@ class CameraDSAC(DSAC):
             hyp_losses[h] = loss
             hyp_scores[h] = score
             line_dists[h] = line_dist
+            #Rs_hyps[h] = cam_params[0]
+            #ts_hyps[h] = cam_params[1]
 
             if score > max_score:
                 max_score = score
                 selected_params = cam_params
+
+            if line_dist < min_line_dist:
+                min_line_dist = line_dist
+                best_line_dist_hyp = cam_params
 
         # === Step 4: calculate the expectation ===========================
 
@@ -224,13 +234,15 @@ class CameraDSAC(DSAC):
         if not invalid_hyps == self.hyps:
             selected_params = self.__get_absolute_params(
                 Rs[0], ts[0], selected_params[0], selected_params[1])
+            best_line_dist_hyp = self.__get_absolute_params(
+                Rs[0], ts[0], best_line_dist_hyp[0], best_line_dist_hyp[1])
         else:
             print('All scores are zero!')
             return None
 
         print(f'Invalid hyps: {invalid_hyps}')
 
-        return total_loss, exp_loss, entropy_loss, selected_params, best_loss, best_softmax_score, best_score, best_line_dist
+        return total_loss, exp_loss, entropy_loss, selected_params, best_loss, best_softmax_score, best_score, best_line_dist, best_line_dist_hyp
 
 
 
@@ -431,20 +443,22 @@ class PoseDSAC(DSAC):
             #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
             final_pose_top += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
         final_pose_top /= hyp_scores_sorted[:10].sum()
-        weighted_error_top = torch.mean(torch.norm(final_pose_top - gt_3d, p=2, dim=1))
+        weighted_error_top = self.loss_function(final_pose_top, gt_3d)
 
         final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.hyps):
             #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
             final_pose += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
         final_pose /= hyp_scores_sorted.sum()
-        weighted_error = torch.mean(torch.norm(final_pose - gt_3d, p=2, dim=1))
+        weighted_loss = self.loss_function(final_pose, gt_3d)
+        #weighted_error = rel_mpjpe(final_pose, gt_3d)
         if self.weighted_selection:
-            return self.loss_function(final_pose, gt_3d), best_loss
+            return weighted_loss, best_loss
         else:
             # Entropy loss.
             if self.entropy_to_scores:
-                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
+                #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
             else:
                 softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
@@ -456,6 +470,6 @@ class PoseDSAC(DSAC):
             entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
             #total_loss = exp_loss + self.entropy_beta * softmax_entropy
-            total_loss = exp_loss + self.entropy_beta * softmax_entropy + weighted_error / 20.
+            total_loss = exp_loss + self.entropy_beta * softmax_entropy + weighted_loss / 20.
 
-            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
+            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, weighted_error_top, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss

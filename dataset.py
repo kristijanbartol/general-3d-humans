@@ -70,6 +70,12 @@ class SparseDataset(Dataset):
         self.num_joints = num_joints
         self.num_frames = num_frames
 
+        # NOTE: Set CamDSAC flag in case CamDSAC is tested (different loading).
+        self.cam_dsac = False
+        if self.num_iterations is None:
+            self.num_iterations = 20
+            self.cam_dsac = True
+
         self.num_poses = 0
 
         # Collect precalculated correspondences, camera params and and 3D GT,
@@ -152,8 +158,7 @@ class SparseDataset(Dataset):
     def __len__(self):
         if self.data_type == TEST:
             # 40
-            #return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
-            return 2
+            return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
         else:
             return self.num_iterations
 
@@ -169,13 +174,13 @@ class SparseDataset(Dataset):
         batch_Rs -- [Cx2x3x3]
         batch_ts -- [Cx2x3x1]
         '''
-        if self.data_type == TEST:
+        if self.data_type == TEST and not self.cam_dsac:
             first_frame = idx * self.num_frames
             last_frame = (idx + 1) * self.num_frames
             subject_nine_frames = self.preds_2d[9].shape[0]
             sidx = 9 if last_frame < subject_nine_frames else 11
             first_frame = first_frame if sidx == 9 else first_frame - subject_nine_frames
-            last_frame = last_frame if sidx == 9 else last_frame - subject_nine_frames
+            last_frame = last_frame if sidx == 9 else min(last_frame - subject_nine_frames, self.preds_2d[11].shape[0])
 
             selected_frames = np.arange(first_frame, last_frame)
         else:

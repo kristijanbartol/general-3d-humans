@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
+import kornia
 
 from dsac import CameraDSAC, PoseDSAC
 from dataset import SparseDataset, TRAIN, VALID, TEST
@@ -92,8 +93,12 @@ if __name__ == '__main__':
         top_losses = []     # losses of top hypotheses
         bottom_losses = []  # losses of worst hypotheses
 
-        all_mean_mpjpe = 0.
+        all_mpjpes = 0.
         min_mean_mpjpe = 100.
+
+        all_rot_errors = 0.
+        all_trans_errors = 0.
+
         log_line = ''
 
         print('############## TRAIN ################')
@@ -136,7 +141,7 @@ if __name__ == '__main__':
                         not_all_positive = True
                         break
                     else:
-                        total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist = cam_dsac_result
+                        total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist, best_line_dist_params = cam_dsac_result
 
                     Rs.append(est_params[0])
                     ts.append(est_params[1])
@@ -162,9 +167,17 @@ if __name__ == '__main__':
                 Rs = torch.stack(Rs, dim=0)
                 ts = torch.stack(ts, dim=0)
 
+                # NOTE: This evaluation only works for 2-camera configuration.
+                R_gt_quat = kornia.rotation_matrix_to_quaternion(Rs[0])
+                Rs_rel_quat = kornia.rotation_matrix_to_quaternion(gt_Rs[1])
+                rot_error = torch.mean(torch.abs(R_gt_quat - Rs_rel_quat))
+
+                all_rot_errors += rot_error.detach().numpy()
+                # TODO: Estimate translation.
+                all_trans_errors += 0.
                 
-                # calculate the gradients of the expected loss
-                baseline = sum(total_losses) / len(total_losses) #expected loss
+                # variance reduction (using "baseline")
+                #baseline = sum(total_losses) / len(total_losses) #expected loss
                 '''
                 for i, l in enumerate(total_losses): # substract baseline for each sample to reduce gradient variance
                     loss_gradients[i] = total_losses[i].backward() * (l - baseline) / opt.samplecount
@@ -218,12 +231,13 @@ if __name__ == '__main__':
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
-                        all_mean_mpjpe += mpjpe
+                        all_mpjpes += mpjpe.detach().numpy()
+                        #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
 
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
                         mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
-                        mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean() # .............
+                        mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
                         mean_top_loss = torch.stack(top_losses, dim=0).mean()
                         mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
@@ -245,17 +259,22 @@ if __name__ == '__main__':
 
                         avg_total_loss = 0
             ################################################
-        mean_mpjpe = all_mean_mpjpe / (num_frames * train_set.num_iterations)
-        print(f'Train epoch finished. Mean MPJPE: {mean_mpjpe}, Camera score: {camera_score}')
+        mean_rot_error = all_rot_errors / train_set.num_iterations
+        mean_trans_error = all_trans_errors / train_set.num_iterations
+        if all_mpjpes > 0.:
+            mean_mpjpe = all_mpjpes / (num_frames * train_set.num_iterations)
+        else:
+            mean_mpjpe = 0.
+        print(f'Train epoch finished. Mean MPJPE: {mean_mpjpe}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
 
-        log_line += f'{epoch_idx}\t\t{mean_mpjpe:.4f}\t\t'
+        log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_mpjpe:.4f}\t\t'
 
         print('############## VALIDATION #################')
         valid_score = 0
         camera_nn.eval()
         pose_nn.eval()
 
-        all_mean_mpjpe = 0
+        all_mpjpes = 0
         for iteration, batch_items in enumerate(valid_dataloader):
             # Load sample.
             corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
@@ -285,7 +304,7 @@ if __name__ == '__main__':
                         not_all_positive = True
                         break
                     else:
-                        total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist = cam_dsac_result
+                        total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist, best_line_dist_params = cam_dsac_result
 
                     total_losses.append(total_loss)
 
@@ -301,6 +320,14 @@ if __name__ == '__main__':
                         f'\tBest (per) Line Dist: \t(\t{best_per_line_dist[0].item():.4f}, \t{best_per_line_dist[1].item():.4f}, \t{best_per_line_dist[2].item():.4f}, \t{best_per_line_dist[3].item():.4f})', 
                         flush=True
                     )
+                # NOTE: This evaluation only works for 2-camera configuration.
+                R2_est_quat = kornia.rotation_matrix_to_quaternion(est_params[0])
+                R2_gt_quat = kornia.rotation_matrix_to_quaternion(gt_Rs[1])
+                rot_error = torch.mean(torch.abs(R2_est_quat - R2_gt_quat))
+
+                all_rot_errors += rot_error.detach().numpy()
+                # TODO: Estimate translation.
+                all_trans_errors += 0.
             else:
                 Rs = gt_Rs
                 ts = gt_ts
@@ -353,7 +380,8 @@ if __name__ == '__main__':
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
-                        all_mean_mpjpe += mpjpe
+                        all_mpjpes += mpjpe.detach().numpy()
+                        #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
 
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
@@ -371,11 +399,15 @@ if __name__ == '__main__':
                             flush=True
                         )
             #############
-
-        mean_mpjpe = all_mean_mpjpe / (num_frames * valid_set.num_iterations)
+        mean_rot_error = all_rot_errors / valid_set.num_iterations
+        mean_trans_error = all_trans_errors / valid_set.num_iterations
+        if all_mpjpes > 0.:
+            mean_mpjpe = all_mpjpes / (num_frames * valid_set.num_iterations)
+        else:
+            mean_mpjpe = 0.
         print(f'Validation finished. Mean MPJPE: {mean_mpjpe}')
 
-        log_line += f'{mean_mpjpe:.4f}\t\t'
+        log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_mpjpe:.4f}\t\t'
 
         if mean_mpjpe < min_mean_mpjpe:
             min_mean_mpjpe = mean_mpjpe
@@ -405,8 +437,14 @@ if __name__ == '__main__':
             camera_nn.eval()
             pose_nn.eval()
 
+            all_rot_error_baselines = 0.
+            all_trans_error_baselines = 0.
+
             all_mpjpes = 0
             all_baselines = 0
+            all_best_hyp_mpjpes = 0
+
+            counter_verification = 0
             for iteration, batch_items in enumerate(test_dataloader):
                 # Load sample.
                 corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
@@ -436,7 +474,7 @@ if __name__ == '__main__':
                             not_all_positive = True
                             break
                         else:
-                            total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist = cam_dsac_result
+                            total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist, best_line_dist_params = cam_dsac_result
 
                         total_losses.append(total_loss)
 
@@ -445,13 +483,30 @@ if __name__ == '__main__':
                         elif best_per_score[0] > best_per_line_dist[0]:
                             valid_score -= 1
                         
-                        print(f'[VALID] Epoch: {epoch_idx}, Iteration: {iteration}, Total Loss: {total_loss.item():.4f}, Expectation loss: {exp_loss:.4f}, Entropy loss: {entropy_loss:.4f}, [LR: {opt.learning_rate}, Temp: {opt.temp:.2f}]\n'
+                        print(f'[TEST] Epoch: {epoch_idx}, Iteration: {iteration}, Total Loss: {total_loss.item():.4f}, Expectation loss: {exp_loss:.4f}, Entropy loss: {entropy_loss:.4f}, [LR: {opt.learning_rate}, Temp: {opt.temp:.2f}]\n'
                             f'\tBest (per) Loss: \t(\t{best_per_loss[0].item():.4f}, \t{best_per_loss[1].item():.4f}, \t{best_per_loss[2].item():.4f}, \t{best_per_loss[3].item():.4f}) \n' 
                             f'\tBest (per) Softmax Score: (\t{best_per_softmax_score[0].item():.4f}, \t{best_per_softmax_score[1].item():.4f}, \t{best_per_softmax_score[2].item():.4f}, \t{best_per_softmax_score[3].item():.4f}) \n'
                             f'\tBest (per) Score: \t(\t{best_per_score[0].item():.4f}, \t{best_per_score[1].item():.4f}, \t{best_per_score[2].item():.4f}, \t{best_per_score[3].item():.4f}) \n'
                             f'\tBest (per) Line Dist: \t(\t{best_per_line_dist[0].item():.4f}, \t{best_per_line_dist[1].item():.4f}, \t{best_per_line_dist[2].item():.4f}, \t{best_per_line_dist[3].item():.4f})', 
                             flush=True
                         )
+
+                    # NOTE: This evaluation only works for 2-camera configuration.
+                    R2_est_quat = kornia.rotation_matrix_to_quaternion(est_params[0])
+                    R2_gt_quat = kornia.rotation_matrix_to_quaternion(gt_Rs[1])
+                    rot_error = torch.mean(torch.abs(R2_est_quat - R2_gt_quat))
+
+                    all_rot_errors += rot_error.detach().numpy()
+                    # TODO: Estimate translation.
+                    all_trans_errors += 0.
+
+
+                    R2_est_quat_line_dist = kornia.rotation_matrix_to_quaternion(best_line_dist_params[0])
+                    rot_error_line_dist = torch.mean(torch.abs(R2_est_quat_line_dist - R2_gt_quat))
+
+                    all_rot_error_baselines += rot_error_line_dist.detach().numpy()
+                    # TODO: Estimate translation.
+                    all_trans_error_baselines += 0.
                 else:
                     Rs = gt_Rs
                     ts = gt_ts
@@ -505,8 +560,13 @@ if __name__ == '__main__':
                                 top_losses.append(top_loss)
                                 bottom_losses.append(bottom_loss)
 
-                            all_mpjpes += mpjpe
-                            all_baselines += baseline_loss
+                            all_mpjpes += mpjpe.detach().numpy()
+                            #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
+                            all_baselines += baseline_loss.detach().numpy()
+                            all_best_hyp_mpjpes += best_per_loss[0].detach().numpy()
+
+                            # TODO: Remove this.
+                            counter_verification += 1
 
                             mean_rank = torch.stack(ranks, dim=0).mean()
                             mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
@@ -525,9 +585,23 @@ if __name__ == '__main__':
                             )
                 #############
             num_samples = test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]
-            print(f'Test finished. Mean MPJPE: {(all_mean_mpjpe / num_samples):.4f}')
+            print(f'Test finished. Mean MPJPE: {(all_mpjpes / num_samples):.4f}')
 
-            log_line += f'{all_mpjpes / num_samples:.4f}\t\t{(all_baselines / num_samples):.4f}'
+            mean_rot_error = all_rot_errors / num_samples
+            mean_trans_error = all_trans_errors / num_samples
+
+            mean_rot_error_baseline = all_rot_error_baselines / num_samples
+
+            if all_mpjpes > 0.:
+                mean_mpjpe = all_mpjpes / num_samples
+                mean_baseline = all_baselines / num_samples
+                mean_best_hyp_mpjpe = all_best_hyp_mpjpes / num_samples
+            else:
+                mean_mpjpe = 0.
+                mean_baseline = 0.
+                mean_best_hyp_mpjpe = 0.
+
+            log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_rot_error_baseline:.4f}\t\t{mean_best_hyp_mpjpe:.4f}\t\t{mean_mpjpe:.4f}\t\t{(mean_baseline):.4f}'
             logger.write(f'{log_line}\n')
             ################################################
 
