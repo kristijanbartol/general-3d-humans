@@ -19,7 +19,7 @@
                 "--temp", "1.8",
                 "--gumbel",
                 "--entropy_beta_cam", ".01",
-                "--entropy_to_scores",
+                //"--entropy_to_scores",
                 "-lr", "0.0005",
                 "-lrs", "10",
                 "-ts", "5",
@@ -31,7 +31,8 @@
                 "--pose_hypotheses", "200",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
                 //"--layers_posedsac", "200", "300", "200",
-                "--entropy_beta_pose", "1.",
+                "--entropy_beta_pose", "0.01",
+                "--weighted_beta", "0.02",
                 "--body_lengths_mode", "1",
                 "--pose_batch_size", "16",
                 //"--weighted_selection"

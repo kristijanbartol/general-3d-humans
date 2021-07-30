@@ -252,7 +252,7 @@ class PoseDSAC(DSAC):
     '''
 
     def __init__(self, hyps, num_joints, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, body_lengths_mode, weighted_selection,
+            temp, gumbel, hard, body_lengths_mode, weighted_selection, weighted_beta,
             score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
@@ -266,9 +266,10 @@ class PoseDSAC(DSAC):
 
         self.entropy_beta = entropy_beta
         self.min_entropy = min_entropy
-        self.entropy_to_scores = entropy_to_scores
-
         self.temp = temp
+        self.weighted_beta = weighted_beta
+        
+        self.entropy_to_scores = entropy_to_scores
         self.gumbel = gumbel
         self.hard = hard
         self.weighted_selection = weighted_selection
@@ -438,12 +439,12 @@ class PoseDSAC(DSAC):
         bottom_loss = hyp_losses_sorted_by_scores[-5:].mean()
 
         # Weighted selection.
-        final_pose_top = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
-        for hidx in range(10):
+        final_pose_avg = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+        for hidx in range(self.hyps):
             #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
-            final_pose_top += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
-        final_pose_top /= hyp_scores_sorted[:10].sum()
-        weighted_error_top = self.loss_function(final_pose_top, gt_3d)
+            final_pose_avg += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * 1.0
+        final_pose_avg /= self.hyps
+        avg_pose_loss = self.loss_function(final_pose_avg, gt_3d)
 
         final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.hyps):
@@ -451,25 +452,27 @@ class PoseDSAC(DSAC):
             final_pose += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
         final_pose /= hyp_scores_sorted.sum()
         weighted_loss = self.loss_function(final_pose, gt_3d)
-        #weighted_error = rel_mpjpe(final_pose, gt_3d)
+
+        # Random pose.
+        random_pose = hyps_3d[torch.randint(self.hyps, (1,))[0]]
+        random_pose_loss = self.loss_function(random_pose, gt_3d)
+
         if self.weighted_selection:
             return weighted_loss, best_loss
         else:
             # Entropy loss.
             if self.entropy_to_scores:
-                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
-                #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
+                #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
+                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
             else:
                 softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
             # Loss expectation.
             hyp_losses /= hyp_losses.max()
-            softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
             exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
             entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-            #total_loss = exp_loss + self.entropy_beta * softmax_entropy
-            total_loss = exp_loss + self.entropy_beta * softmax_entropy + weighted_loss / 20.
+            total_loss = exp_loss + self.entropy_beta * softmax_entropy + self.weighted_beta * weighted_loss
 
-            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, weighted_error_top, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
+            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, avg_pose_loss, random_pose_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss

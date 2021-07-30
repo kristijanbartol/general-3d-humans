@@ -70,7 +70,7 @@ if __name__ == '__main__':
         opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
         opt.temp, opt.gumbel, opt.hard, camera_nn, camera_loss)
     pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, opt.entropy_to_scores,
-        opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, opt.weighted_selection, pose_nn, pose_loss)
+        opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, opt.weighted_selection, opt.weighted_beta, pose_nn, pose_loss)
 
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,
@@ -88,8 +88,9 @@ if __name__ == '__main__':
         # Init PoseDSAC metrics.
         ranks = []          # hypotheses ranks
         mpjpes = []         # MPJPEs of the hypotheses
-        diffs_to_best = []          # difference between the hypothesis MPJPE and best MPJPE
         diffs_to_baseline = []          # difference between the hypothesis MPJPE and best MPJPE
+        diffs_to_avg = []          # difference between the hypothesis MPJPE and best MPJPE
+        diffs_to_random = []
         top_losses = []     # losses of top hypotheses
         bottom_losses = []  # losses of worst hypotheses
 
@@ -209,25 +210,28 @@ if __name__ == '__main__':
                         total_loss, best_per_loss = pose_result
                         print(total_loss.item(), best_per_loss[0].item())
                     else:
-                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, avg_error, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
 
                         # Update metrics.
                         mpjpe = weighted_error
-                        diff_to_best = weighted_error - best_per_loss[0]
                         diff_to_baseline = weighted_error - baseline_loss
+                        diff_to_avg = weighted_error - avg_error
+                        diff_to_random = weighted_error - random_error
 
                         if len(ranks) == 100:
                             ranks[:-1] = ranks[1:]; ranks[-1] = rank
                             mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                            diffs_to_best[:-1] = diffs_to_best[1:]; diffs_to_best[-1] = diff_to_best
                             diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
+                            diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
+                            diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random                     
                             top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
                             bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
                         else:
                             ranks.append(rank)
                             mpjpes.append(mpjpe)
-                            diffs_to_best.append(diff_to_best)
                             diffs_to_baseline.append(diff_to_baseline)
+                            diffs_to_avg.append(diff_to_avg)
+                            diffs_to_random.append(diff_to_random)
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
@@ -236,17 +240,18 @@ if __name__ == '__main__':
 
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                        mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
                         mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
+                        mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
+                        mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
                         mean_top_loss = torch.stack(top_losses, dim=0).mean()
                         mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
                         # Log to stdout.
-                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to [Baseline: {mean_diff_to_baseline:.2f}, Average: {mean_diff_to_avg:.2f}, Random: {mean_diff_to_random:.2f}], Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
                             f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
                             f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
                             f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
-                            f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
+                            f'\tWeighted Error: \t({weighted_error:.4f}, {avg_error:.4f}, {random_error:.4f})',
                             flush=True
                         )
 
@@ -337,8 +342,9 @@ if __name__ == '__main__':
             # Init PoseDSAC metrics.
             ranks = []              # hypotheses ranks
             mpjpes = []             # MPJPEs of the hypotheses
-            diffs_to_best = []      # difference between the hypothesis MPJPE and best MPJPE
             diffs_to_baseline = []  # difference between the hypothesis MPJPE and all-view triangulation (baseline)
+            diffs_to_avg = []      # difference between the hypothesis MPJPE and best MPJPE
+            diffs_to_random = []
             top_losses = []         # losses of top hypotheses
             bottom_losses = []      # losses of worst hypotheses
 
@@ -354,12 +360,13 @@ if __name__ == '__main__':
                         total_loss, best_per_loss = pose_result
                         print(total_loss.item(), best_per_loss[0].item())
                     else:
-                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, avg_error, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
 
                         # Update metrics.
                         mpjpe = weighted_error
-                        diff_to_best = weighted_error - best_per_loss[0]
                         diff_to_baseline = weighted_error - baseline_loss
+                        diff_to_avg = weighted_error - avg_error
+                        diff_to_random = weighted_error - random_error
 
                         # TODO: This is only temporarily here (for test set).
                         #if mpjpe > 100.:
@@ -368,15 +375,17 @@ if __name__ == '__main__':
                         if len(ranks) == 100:
                             ranks[:-1] = ranks[1:]; ranks[-1] = rank
                             mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                            diffs_to_best[:-1] = diffs_to_best[1:]; diffs_to_best[-1] = diff_to_best
                             diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
+                            diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
+                            diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random
                             top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
                             bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
                         else:
                             ranks.append(rank)
                             mpjpes.append(mpjpe)
-                            diffs_to_best.append(diff_to_best)
                             diffs_to_baseline.append(diff_to_baseline)
+                            diffs_to_avg.append(diff_to_avg)
+                            diffs_to_random.append(diff_to_random)
                             top_losses.append(top_loss)
                             bottom_losses.append(bottom_loss)
 
@@ -385,17 +394,18 @@ if __name__ == '__main__':
 
                         mean_rank = torch.stack(ranks, dim=0).mean()
                         mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                        mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
                         mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
+                        mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
+                        mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
                         mean_top_loss = torch.stack(top_losses, dim=0).mean()
                         mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
                         # Log to stdout.
-                        print(f'[VALIDATION] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                        print(f'[VALIDATION] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to [Baseline: {mean_diff_to_baseline:.2f}, Average: {mean_diff_to_avg:.2f}, Random: {mean_diff_to_random:.2f}], Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
                             f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
                             f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
                             f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
-                            f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
+                            f'\tWeighted Error: \t({weighted_error:.4f}, {avg_error:.4f}, {random_error:.4f})',
                             flush=True
                         )
             #############
@@ -443,6 +453,8 @@ if __name__ == '__main__':
             all_mpjpes = 0
             all_baselines = 0
             all_best_hyp_mpjpes = 0
+            all_avgs = 0
+            all_randoms = 0
 
             counter_verification = 0
             for iteration, batch_items in enumerate(test_dataloader):
@@ -516,8 +528,9 @@ if __name__ == '__main__':
                 # Init PoseDSAC metrics.
                 ranks = []              # hypotheses ranks
                 mpjpes = []             # MPJPEs of the hypotheses
-                diffs_to_best = []      # difference between the hypothesis MPJPE and best MPJPE
                 diffs_to_baseline = []  # difference between the hypothesis MPJPE and all-view triangulation (baseline)
+                diffs_to_avg = []      # difference between the hypothesis MPJPE and best MPJPE
+                diffs_to_random = []
                 top_losses = []         # losses of top hypotheses
                 bottom_losses = []      # losses of worst hypotheses
 
@@ -533,13 +546,13 @@ if __name__ == '__main__':
                             total_loss, best_per_loss = pose_result
                             print(total_loss.item(), best_per_loss[0].item())
                         else:
-                            total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, weighted_error_top, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+                            total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, error_avg, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
 
                             # Update metrics.
                             mpjpe = weighted_error
-                            diff_to_best = weighted_error - best_per_loss[0]
+                            diff_to_avg = weighted_error - error_avg
                             diff_to_baseline = weighted_error - baseline_loss
-
+                            diff_to_random = weighted_error - random_error
 
                             if opt.filter_bad:
                                 if mpjpe > 100.:
@@ -548,39 +561,43 @@ if __name__ == '__main__':
                             if len(ranks) == 100:
                                 ranks[:-1] = ranks[1:]; ranks[-1] = rank
                                 mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                                diffs_to_best[:-1] = diffs_to_best[1:]; diffs_to_best[-1] = diff_to_best
                                 diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
+                                diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
+                                diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random
                                 top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
                                 bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
                             else:
                                 ranks.append(rank)
                                 mpjpes.append(mpjpe)
-                                diffs_to_best.append(diff_to_best)
                                 diffs_to_baseline.append(diff_to_baseline)
+                                diffs_to_avg.append(diff_to_avg)
+                                diffs_to_random.append(diff_to_random)
                                 top_losses.append(top_loss)
                                 bottom_losses.append(bottom_loss)
 
                             all_mpjpes += mpjpe.detach().numpy()
-                            #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
                             all_baselines += baseline_loss.detach().numpy()
                             all_best_hyp_mpjpes += best_per_loss[0].detach().numpy()
+                            all_avgs += error_avg.detach().numpy()
+                            all_randoms += random_error.detach().numpy()
 
-                            # TODO: Remove this.
+
                             counter_verification += 1
 
                             mean_rank = torch.stack(ranks, dim=0).mean()
                             mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                            mean_diff_to_best = torch.stack(diffs_to_best, dim=0).mean()
                             mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
+                            mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
+                            mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
                             mean_top_loss = torch.stack(top_losses, dim=0).mean()
                             mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
                             # Log to stdout.
-                            print(f'[TEST] Iteration: {iteration + 1} / {len(test_set)} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to baseline: {mean_diff_to_baseline:.2f}, Diff to best: {mean_diff_to_best:.2f}, Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
+                            print(f'[TEST] Iteration: {iteration + 1} / {len(test_set)} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to [Baseline: {mean_diff_to_baseline:.2f}, Average: {mean_diff_to_avg:.2f}, Random: {mean_diff_to_random:.2f}], Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
                                 f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
                                 f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
                                 f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
-                                f'\tWeighted Error: \t({weighted_error:.4f}, {weighted_error_top:.4f})',
+                                f'\tWeighted Error: \t({weighted_error:.4f}, {error_avg:.4f}, {random_error:.4f})',
                                 flush=True
                             )
                 #############
@@ -596,12 +613,16 @@ if __name__ == '__main__':
                 mean_mpjpe = all_mpjpes / num_samples
                 mean_baseline = all_baselines / num_samples
                 mean_best_hyp_mpjpe = all_best_hyp_mpjpes / num_samples
+                mean_avg = all_avgs / num_samples
+                mean_random = all_randoms / num_samples
             else:
                 mean_mpjpe = 0.
                 mean_baseline = 0.
                 mean_best_hyp_mpjpe = 0.
+                mean_avg = 0.
+                mean_random = 0.
 
-            log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_rot_error_baseline:.4f}\t\t{mean_best_hyp_mpjpe:.4f}\t\t{mean_mpjpe:.4f}\t\t{(mean_baseline):.4f}'
+            log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_rot_error_baseline:.4f}\t\t{mean_best_hyp_mpjpe.item():.4f}\t\t{(mean_baseline):.4f}\t\t{mean_mpjpe:.4f}\t\t{(mean_avg):.4f}\t\t{(mean_random):.4f}'
             logger.write(f'{log_line}\n')
             ################################################
 
