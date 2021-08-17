@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def mpjpe(est, gt):
@@ -54,11 +55,11 @@ class PoseMetrics():
 
         lengths = np.empty(self.nseg, dtype=np.float32)
         for i in range(self.nseg):
-            lengths[i] = np.linalg.norm(pose_3d[i][0] - pose_3d[i][1], ord=2))
+            lengths[i] = np.linalg.norm(pose_3d[i][0] - pose_3d[i][1], ord=2)
         ratios = np.empty([self.nseg, self.nseg], dtype=np.float32)
         for i in range(self.nseg):
             for j in range(self.nseg):
-                ratios[i, j] = length[i] / length[j]
+                ratios[i, j] = lengths[i] / lengths[j]
 
         self.ratioss = np.concatenate([self.ratioss, ratios], axis=0)
 
@@ -118,91 +119,13 @@ class GlobalMetrics():
 
     def __init__(self):
         self.best = PoseMetrics()
-        self.gt = PoseMetrics()
+        self.worst = PoseMetrics()
+        self.top = PoseMetrics()
+        self.bottom = PoseMetrics()
+        #self.gt = PoseMetrics()
         self.random = PoseMetrics()
         self.avg = PoseMetrics()
         self.wavg = PoseMetrics()
         self.triang = PoseMetrics()
-        self.selected = PoseMetrics()
-        self.worst = PoseMetrics()
 
         self.loss = LossMetrics()
-
-
-class Hypotheses():
-
-    def __init__(self, nhyps, njoints, device=device):
-        self.nhyps = nhyps
-        self.njoints = njoints
-        self.hyp_losses = torch.zeros([nhyps, 1], device=device)
-        self.hyp_scores = torch.zeros([nhyps, 1], device=device)
-        self.hyp_poses = torch.zeros([nhyps, self.num_joints, 3], device=device)
-
-    def update(self, idx, loss, score, pose):
-        self.hyp_losses[idx] = loss
-        self.hyp_scores[idx] = score
-        self.hyp_poses[idx] = pose
-
-    @property
-    def sorted_losses(self):
-        return torch.sort(self.hyp_losses, dim=0)[0]
-
-    @property
-    def sorted_loss_idxs(self):
-        return torch.sort(hyp_losses, dim=0)[1]
-
-    @property
-    def sorted_scores(self):
-        return torch.sort(self.hyp_scores, dim=0, descending=True)[0]
-
-    @property
-    def sorted_score_idxs(self):
-        return torch.sort(self.hyp_scores, dim=0, descending=True)[1]
-
-    @property
-    def losses_sorted_by_scores(self):
-        return hyp_losses[self.sorted_score_idxs[:, 0]]
-
-    @property
-    def scores_sorted_by_losses(self):
-        return hyp_scores[self.sorted_loss_idxs[:, 0]]
-
-    @property
-    def best(self):
-        # Best per loss.
-        return self.hyp_poses[self.sorted_loss_idxs[0]]
-
-    @property
-    def worst(self):
-        # Worst per loss.
-        return self.hyp_poses[self.sorted_loss_idxs[-1]]
-
-    @property
-    def top(self):
-        # Best per score.
-        return self.hyp_poses[self.sorted_score_idxs[0]]
-
-    @property
-    def bottom(self):
-        # Worst per score.
-        return self.hyp_poses[self.sorted_score_idxs[-1]]
-
-    @property
-    def random(self):
-        return self.hyp_poses[torch.randint(self.nhyps, (1,))[0]]
-
-    @property
-    def avg(self):
-        avg_pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
-        for hidx in range(self.nhyps):
-            avg_pose += self.hyp_poses[self.sorted_score_idxs[:, 0]][hidx] * 1.0
-        avg_pose /= self.nhyps
-        return avg_pose
-
-    @property
-    def wavg(self):
-        weight_avg_pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
-        for hidx in range(self.nhyps):
-            weight_avg_pose += self.hyp_poses[self.sorted_score_idxs[:, 0]][hidx] * self.sorted_scores[hidx, 0]
-        weight_avg_pose /= self.nhyps
-        return weight_avg_pose

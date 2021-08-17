@@ -10,6 +10,7 @@ from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
 from mvn.utils.vis import CONNECTIVITY_DICT
 from metrics import rel_mpjpe
+from hypothesis import HypothesisPool, Hypothesis
 
 
 class DSAC:
@@ -365,7 +366,7 @@ class PoseDSAC(DSAC):
 
         return self.score_nn(network_input.cuda())
 
-    def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d, mean, std):
+    def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d, mean, std, metrics):
         '''
         Perform robust, differentiable triangulation.
 
@@ -375,18 +376,19 @@ class PoseDSAC(DSAC):
         ts -- GT/estimated translations for B frames: (Cx3x1)
         gts_3d -- GT 3D poses: (Jx3)
         '''
-        hyp_losses = torch.zeros([self.hyps, 1], device=self.device)                   # hyp losses
-        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)                   # hyp scores
-        hyps_3d = torch.zeros([self.hyps, self.num_joints, 3], device=self.device)
+        hpool = HypothesisPool(self.hyps, self.num_joints, gt_3d, self.loss_function, device=self.device)
+        #hyp_losses = torch.zeros([self.hyps, 1], device=self.device)                   # hyp losses
+        #hyp_scores = torch.zeros([self.hyps, 1], device=self.device)                   # hyp scores
+        #hyps_3d = torch.zeros([self.hyps, self.num_joints, 3], device=self.device)
         
-        best_loss_loss = 1000           # this one is a reference
-        best_loss_score = 0
+        #best_loss_loss = 1000           # this one is a reference
+        #best_loss_score = 0
 
-        best_score_loss = 0
-        best_score_score = 0            # this one is a reference
+        #best_score_loss = 0
+        #best_score_score = 0            # this one is a reference
 
-        baseline = None
-        selected_pose = None
+        baseline = False
+        #selected_pose = None
 
         for h in range(0, self.hyps):
 
@@ -399,80 +401,95 @@ class PoseDSAC(DSAC):
             score = self.__score_nn(sample, mean, std)
 
             # === Step 3: Calculate loss of hypothesis ================
-            if baseline is None:
-                baseline = sample_tuple[1]
-                baseline_loss = self.loss_function(baseline, gt_3d)
-            loss = self.loss_function(sample, gt_3d)
+            # TODO: Acquire baseline more nicely.
+            if not baseline:
+                hpool.set_baseline(sample_tuple[1])
+                baseline = True
+                #baseline_loss = self.loss_function(baseline, gt_3d)
+            #loss = self.loss_function(sample, gt_3d)
 
             # Store results.
-            hyp_losses[h] = loss
-            hyp_scores[h] = score
-            hyps_3d[h] = sample
+            hpool.append(h, sample, score)
+            #hyp_losses[h] = loss
+            #hyp_scores[h] = score
+            #hyps_3d[h] = sample
 
             # Keep track of best hypotheses with respect to loss and score.
-            if loss < best_loss_loss:
-                best_loss_loss = loss
-                best_loss_score = score
+            #if loss < best_loss_loss:
+            #    best_loss_loss = loss
+            #    best_loss_score = score
 
-            if score > best_score_score:
-                best_score_loss = loss
-                best_score_score = score
-                selected_pose = sample
+            #if score > best_score_score:
+            #    best_score_loss = loss
+            #    best_score_score = score
+            #    selected_pose = sample
         
-        best_loss = (best_loss_loss, best_loss_score)
-        best_score = (best_score_loss, best_score_score)
+        #best_loss = (best_loss_loss, best_loss_score)
+        #best_score = (best_score_loss, best_score_score)
 
         # === Step 4: calculate the expectation ===========================
 
         # Softmax distribution from hypotheses scores.
         if self.gumbel:
-            hyp_scores_softmax = F.gumbel_softmax(hyp_scores, tau=self.temp, hard=self.hard, dim=0)
+            hyp_scores_softmax = F.gumbel_softmax(hpool.scores, tau=self.temp, hard=self.hard, dim=0)
         else:  
-            hyp_scores_softmax = F.softmax(hyp_scores / self.temp, dim=0)
+            hyp_scores_softmax = F.softmax(hpool.scores / self.temp, dim=0)
 
         # Calculate metrics.
-        hyp_losses_sorted, _ = torch.sort(hyp_losses, dim=0)
-        hyp_rank = (hyp_losses_sorted == best_score_loss).nonzero(as_tuple=True)[0].float()
-        hyp_scores_sorted, hyp_scores_sorted_idxs = torch.sort(hyp_scores, dim=0, descending=True)
-        hyp_losses_sorted_by_scores = hyp_losses[hyp_scores_sorted_idxs[:, 0]]
-        top_loss = hyp_losses_sorted_by_scores[:5].mean()
-        bottom_loss = hyp_losses_sorted_by_scores[-5:].mean()
+        #hyp_losses_sorted, _ = torch.sort(hyp_losses, dim=0)
+        #hyp_rank = (hyp_losses_sorted == best_score_loss).nonzero(as_tuple=True)[0].float()
+        #hyp_scores_sorted, hyp_scores_sorted_idxs = torch.sort(hyp_scores, dim=0, descending=True)
+        #hyp_losses_sorted_by_scores = hyp_losses[hyp_scores_sorted_idxs[:, 0]]
+        #top_loss = hyp_losses_sorted_by_scores[:5].mean()
+        #bottom_loss = hyp_losses_sorted_by_scores[-5:].mean()
 
         # Weighted selection.
-        final_pose_avg = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
-        for hidx in range(self.hyps):
+        #final_pose_avg = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+        #for hidx in range(self.hyps):
             #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
-            final_pose_avg += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * 1.0
-        final_pose_avg /= self.hyps
-        avg_pose_loss = self.loss_function(final_pose_avg, gt_3d)
+        #    final_pose_avg += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * 1.0
+        #final_pose_avg /= self.hyps
+        #avg_pose_loss = self.loss_function(final_pose_avg, gt_3d)
 
-        final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
-        for hidx in range(self.hyps):
+        #final_pose = torch.zeros((self.num_joints, 3), dtype=torch.float32, device=self.device)
+        #for hidx in range(self.hyps):
             #final_pose += hyps_3d[hidx] * hyp_scores[hidx, 0]
-            final_pose += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
-        final_pose /= hyp_scores_sorted.sum()
-        weighted_loss = self.loss_function(final_pose, gt_3d)
+        #    final_pose += hyps_3d[hyp_scores_sorted_idxs[:, 0]][hidx] * hyp_scores_sorted[hidx, 0]
+        #final_pose /= hyp_scores_sorted.sum()
+        #weighted_loss = self.loss_function(final_pose, gt_3d)
 
         # Random pose.
-        random_pose = hyps_3d[torch.randint(self.hyps, (1,))[0]]
-        random_pose_loss = self.loss_function(random_pose, gt_3d)
+        #random_pose = hyps_3d[torch.randint(self.hyps, (1,))[0]]
+        #random_pose_loss = self.loss_function(random_pose, gt_3d)
 
-        if self.weighted_selection:
-            return weighted_loss, best_loss
+        #if self.weighted_selection:
+        #    return weighted_loss, best_loss
+        #else:
+        # Entropy loss.
+        if self.entropy_to_scores:
+            #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
+            softmax_entropy = -torch.sum(hpool.scores * torch.log(hyp_scores_softmax))
         else:
-            # Entropy loss.
-            if self.entropy_to_scores:
-                #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
-                softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
-            else:
-                softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
+            softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
-            # Loss expectation.
-            hyp_losses /= hyp_losses.max()
+        # Loss expectation.
+        hpool.losses /= hpool.losses.max()
 
-            exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
-            entropy_loss = max(0., (softmax_entropy - self.min_entropy))
+        exp_loss = torch.sum(hpool.losses * hyp_scores_softmax)
+        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-            total_loss = exp_loss + self.entropy_beta * softmax_entropy + self.weighted_beta * weighted_loss
+        total_loss = exp_loss + self.entropy_beta * softmax_entropy + self.weighted_beta * hpool.wavg.loss
 
-            return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, avg_pose_loss, random_pose_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
+        # Update metrics.
+        metrics.loss.update(total_loss, exp_loss, entropy_loss)
+        metrics.best.update(hpool.best.loss, hpool.best.pose)
+        metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
+        metrics.top.update(hpool.top.loss, hpool.top.pose)
+        metrics.bottom.update(hpool.bottom.loss, hpool.bottom.pose)
+        metrics.random.update(hpool.random.loss, hpool.random.pose)
+        metrics.avg.update(hpool.avg.loss, hpool.avg.pose)
+        metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)
+        metrics.triang.update(hpool.triang.loss, hpool.triang.pose)
+
+        return metrics
+        #return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, avg_pose_loss, random_pose_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
