@@ -212,55 +212,6 @@ if __name__ == '__main__':
                     total_loss, global_metrics, pool_metrics = \
                         pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                    #if opt.weighted_selection:
-                    #    total_loss, best_per_loss = pose_result
-                    #    print(total_loss.item(), best_per_loss[0].item())
-                    #else:
-                    #total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, avg_error, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
-
-                    # Update metrics.
-                    #mpjpe = weighted_error
-                    #diff_to_baseline = weighted_error - baseline_loss
-                    #diff_to_avg = weighted_error - avg_error
-                    #diff_to_random = weighted_error - random_error
-
-                    #if len(ranks) == 100:
-                    #    ranks[:-1] = ranks[1:]; ranks[-1] = rank
-                    #    mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                    #    diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
-                    #    diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
-                    #    diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random                     
-                    #    top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
-                    #    bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
-                    #else:
-                    #    ranks.append(rank)
-                    #    mpjpes.append(mpjpe)
-                    #    diffs_to_baseline.append(diff_to_baseline)
-                    #    diffs_to_avg.append(diff_to_avg)
-                    #    diffs_to_random.append(diff_to_random)
-                    #    top_losses.append(top_loss)
-                    #    bottom_losses.append(bottom_loss)
-
-                    #    all_mpjpes += mpjpe.detach().numpy()
-                        #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
-
-                    #    mean_rank = torch.stack(ranks, dim=0).mean()
-                    #    mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                    #    mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
-                    #    mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
-                    #    mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
-                    #    mean_top_loss = torch.stack(top_losses, dim=0).mean()
-                    #    mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
-
-                    # Log to stdout.
-                    #print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [MPJPE: {metrics.wavg.error:.2f}, Diff to [4-triang: {metrics.to_triang:.2f}, Average: {metrics.to_avg:.2f}, Random: {metrics.to_random:.2f}], Top Error: {metrics.top.error:.2f}, Bottom Error: {metrics.bottom.error:.2f}]\n'
-                    #    f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
-                    #    f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
-                    #    f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
-                    #    f'\tWeighted Error: \t({weighted_error:.4f}, {avg_error:.4f}, {random_error:.4f})',
-                    #    flush=True
-                    #)
-
                     print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [MPJPE: {global_metrics.wavg.error:.2f}, Diff to [4-triang: {global_metrics.to_triang:.2f}, Average: {global_metrics.to_avg:.2f}, Random: {global_metrics.to_random:.2f}], Top Error: {global_metrics.top.error:.2f}, Bottom Error: {global_metrics.bottom.error:.2f}]\n'
                         f'\tBest (per) Loss: \t({pool_metrics.best.loss.item():.4f}, {pool_metrics.best.score.item():.4f})\n'
                         f'\tBest (per) Score: \t({pool_metrics.top.loss.item():.4f}, {pool_metrics.top.score.item():.4f})\n'
@@ -280,13 +231,10 @@ if __name__ == '__main__':
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
-        #if all_mpjpes > 0.:
-        #    mean_mpjpe = all_mpjpes / (num_frames * train_set.num_iterations)
-        #else:
-        #    mean_mpjpe = 0.
+
         print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
 
-        log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_mpjpe:.4f}\t\t'
+        log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{global_metrics.wavg.error:.4f}\t\t'
 
         print('############## VALIDATION #################')
         valid_score = 0

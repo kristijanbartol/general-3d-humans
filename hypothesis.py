@@ -122,7 +122,7 @@ class HypothesisPool():
     def avg(self):
         pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.nhyps):
-            pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * 1.0
+            pose += self.poses[hidx] * 1.0
         pose /= self.nhyps
         return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
@@ -130,7 +130,7 @@ class HypothesisPool():
     def wavg(self):
         pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.nhyps):
-            pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * self.sorted_scores[hidx, 0]
+            pose += self.poses[hidx] * self.scores[hidx]
         pose /= self.sorted_scores.sum()
         return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
