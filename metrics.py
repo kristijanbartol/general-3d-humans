@@ -135,13 +135,17 @@ class GlobalMetrics():
         self.loss = LossMetrics()
 
     @property
-    def to_triang(self):
+    def diff_to_triang(self):
         return (self.wavg.errors - self.triang.errors).mean()
 
     @property
-    def to_avg(self):
+    def diff_to_avg(self):
         return (self.wavg.errors - self.avg.errors).mean()
 
     @property
-    def to_random(self):
+    def diff_to_random(self):
         return (self.wavg.errors - self.random.errors).mean()
+
+    def flush(self):
+        for attribute in list(self.__dict__):
+            self.__dict__[attribute].flush()
