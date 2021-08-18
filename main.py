@@ -288,16 +288,16 @@ if __name__ == '__main__':
 
                 for fidx in range(num_frames):
                     _, global_metrics, pool_metrics = \
-                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d)
+                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
                     log_stdout('VALID', epoch_idx, global_metrics, pool_metrics)
             #############
+
         mean_rot_error = all_rot_errors / valid_set.num_iterations
         mean_trans_error = all_trans_errors / valid_set.num_iterations
 
         print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
-        log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{global_metrics.wavg.error:.4f}\t\t'
-        global_metrics.flush()
+        log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{global_metrics.wavg.error:.4f}\t\t'
 
         if global_metrics.wavg.error < min_mean_mpjpe:
             min_mean_mpjpe = global_metrics.wavg.error
@@ -319,6 +319,8 @@ if __name__ == '__main__':
             }, 
             f'models/{session_id}_last.pt'
         )
+
+        global_metrics.flush()
         ################################################
 
         if opt.test:
@@ -398,6 +400,7 @@ if __name__ == '__main__':
                     ts = gt_ts
                 #############
 
+                # PoseDSAC. #
                 if not opt.camdsac_only:
                     Ks = gt_Ks
                     num_frames = est_2d.shape[0]
@@ -412,43 +415,19 @@ if __name__ == '__main__':
                                 continue
 
                             log_stdout('TEST', epoch_idx, global_metrics, pool_metrics)
-
-                            # Log to stdout.
-                            print(f'[TEST] Iteration: {iteration + 1} / {len(test_set)} ({fidx + 1}/{num_frames} frames), [MPJPE: {global_metrics.wavg.error:.2f}, Diff to [[4-triang: {global_metrics.diff_to_triang:.2f}, Average: {global_metrics.diff_to_avg:.2f}, Random: {global_metrics.diff_to_random:.2f}], Top Error: {global_metrics.top.error:.2f}, Bottom Error: {global_metrics.bottom.error:.2f}]\n'
-                                f'\tBest (per) Loss: \t({pool_metrics.best.loss.item():.4f}, {pool_metrics.best.score.item():.4f})\n'
-                                f'\tBest (per) Score: \t({pool_metrics.top.loss.item():.4f}, {pool_metrics.top.score.item():.4f})\n'
-                                f'\t4-triang Loss: \t\t({pool_metrics.triang.loss.item():.4f})\n'
-                                f'\tWeighted Error: \t({pool_metrics.wavg.loss.item():.4f}, {pool_metrics.avg.loss.item():.4f}, {pool_metrics.random.loss.item():.4f})',
-                                flush=True
-                            )
                 #############
             num_samples = test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]
-            #print(f'Test finished. Mean MPJPE: {(all_mpjpes / num_samples):.4f}')
 
             mean_rot_error = all_rot_errors / num_samples
             mean_trans_error = all_trans_errors / num_samples
 
-            print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
-            log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{global_metrics.wavg.error:.4f}\t\t'
+            print(f'Test finished. Mean MPJPE: {global_metrics.wavg.error}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
+            mean_rot_error_baseline = all_rot_error_baselines / num_samples
+            log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_rot_error_baseline:.4f}\t\t{global_metrics.best.error:.4f}\t\t{(global_metrics.triang.error):.4f}\t\t{global_metrics.wavg.error:.4f}\t\t{(global_metrics.avg.error):.4f}\t\t{(global_metrics.random.error):.4f}'
+
+            logger.write(f'{log_line}\n')
             global_metrics.flush()
 
-            mean_rot_error_baseline = all_rot_error_baselines / num_samples
-
-            #if all_mpjpes > 0.:
-            #    mean_mpjpe = all_mpjpes / num_samples
-            #    mean_baseline = all_baselines / num_samples
-            #    mean_best_hyp_mpjpe = all_best_hyp_mpjpes / num_samples
-            #    mean_avg = all_avgs / num_samples
-            #    mean_random = all_randoms / num_samples
-            #else:
-            #    mean_mpjpe = 0.
-            #    mean_baseline = 0.
-            #    mean_best_hyp_mpjpe = 0.
-            #    mean_avg = 0.
-            #    mean_random = 0.
-
-            #log_line += f'{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_rot_error_baseline:.4f}\t\t{mean_best_hyp_mpjpe.item():.4f}\t\t{(mean_baseline):.4f}\t\t{mean_mpjpe:.4f}\t\t{(mean_avg):.4f}\t\t{(mean_random):.4f}'
-            logger.write(f'{log_line}\n')
             ################################################
 
     logger.close()
