@@ -27,17 +27,18 @@ class HypothesisPool():
 
         self.gt_3d = gt_3d
         self.loss_fun = loss_fun
+        self.device = device
 
         self.hyps = []
 
         # These attributes are used for internal simplicity, 
         # should correspond to self.hyps.
-        self.losses = torch.zeros([nhyps, 1], device=device)
-        self.scores = torch.zeros([nhyps, 1], device=device)
-        self.poses = torch.zeros([nhyps, self.num_joints, 3], device=device)
+        self.losses = torch.zeros([nhyps, 1], device=self.device)
+        self.scores = torch.zeros([nhyps, 1], device=self.device)
+        self.poses = torch.zeros([nhyps, self.njoints, 3], device=self.device)
 
-        # TODO: Baseline is currently set externally.
-        self.baseline = None
+        # TODO: 4-triang is currently set externally.
+        self.triang = None
 
     def append(self, pose, score):
         idx = len(self.hyps) - 1
@@ -72,45 +73,66 @@ class HypothesisPool():
     def scores_sorted_by_losses(self):
         return self.scores[self.sorted_loss_idxs[:, 0]]
 
+    def __create_hyp(self, idx):
+        hyp = Hypothesis(self.poses[idx], self.gt_3d, self.loss_fun)
+        hyp.score = self.scores[idx]
+        return hyp
+
     @property
-    def best(self):
+    def _best_idx(self):
+        return self.sorted_loss_idxs[0].item()
+
+    @property
+    def best(self) -> Hypothesis:
         # Best per loss.
-        return self.poses[self.sorted_loss_idxs[0]]
+        return self.__create_hyp(self._best_idx)
 
     @property
-    def worst(self):
+    def _worst_idx(self):
+        return self.sorted_loss_idxs[-1].item()
+
+    @property
+    def worst(self) -> Hypothesis:
         # Worst per loss.
-        return self.poses[self.sorted_loss_idxs[-1]]
+        return self.__create_hyp(self._worst_idx)
 
     @property
-    def top(self):
+    def _top_idx(self):
+        return self.sorted_score_idxs[0].item()
+
+    @property
+    def top(self) -> Hypothesis:
         # Best per score.
-        return self.poses[self.sorted_score_idxs[0]]
+        return self.__create_hyp(self._top_idx)
 
     @property
-    def bottom(self):
+    def _bottom_idx(self):
+        return self.sorted_score_idxs[-1].item()
+
+    @property
+    def bottom(self) -> Hypothesis:
         # Worst per score.
-        return self.poses[self.sorted_score_idxs[-1]]
+        return self.__create_hyp(self._bottom_idx)
 
     @property
-    def random(self):
-        return self.poses[torch.randint(self.nhyps, (1,))[0]]
+    def random(self) -> Hypothesis:
+        return self.__create_hyp(torch.randint(self.nhyps, (1,))[0])
 
     @property
     def avg(self):
-        avg_pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
+        pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.nhyps):
-            avg_pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * 1.0
-        avg_pose /= self.nhyps
-        return avg_pose
+            pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * 1.0
+        pose /= self.nhyps
+        return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
     @property
     def wavg(self):
-        weight_avg_pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
+        pose = torch.zeros((self.njoints, 3), dtype=torch.float32, device=self.device)
         for hidx in range(self.nhyps):
-            weight_avg_pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * self.sorted_scores[hidx, 0]
-        weight_avg_pose /= self.nhyps
-        return weight_avg_pose
+            pose += self.poses[self.sorted_score_idxs[:, 0]][hidx] * self.sorted_scores[hidx, 0]
+        pose /= self.sorted_scores.sum()
+        return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
-    def set_baseline(self, pose):
-        self.baseline = Hypothesis(pose, self.gt_3d, self.loss_fun)
+    def set_triang(self, pose) -> None:
+        self.triang = Hypothesis(pose, self.gt_3d, self.loss_fun)

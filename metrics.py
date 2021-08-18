@@ -47,19 +47,20 @@ class PoseMetrics():
         self.nseg = len(self._all_segments)
 
         self.ratioss = None
-        self.errors = None
+        self._errors = None
         self.flush()
     
     def update(self, error, pose_3d):
-        self.errors.append(error)
+        self._errors.append(error.detach().numpy())
 
+        pose_3d = pose_3d.detach().numpy()
         lengths = np.empty(self.nseg, dtype=np.float32)
-        for i in range(self.nseg):
-            lengths[i] = np.linalg.norm(pose_3d[i][0] - pose_3d[i][1], ord=2)
-        ratios = np.empty([self.nseg, self.nseg], dtype=np.float32)
+        for i, seg_idxs in enumerate(self._all_segments):
+            lengths[i] = np.linalg.norm(pose_3d[seg_idxs[0]] - pose_3d[seg_idxs[1]], ord=2)
+        ratios = np.empty([1, self.nseg, self.nseg], dtype=np.float32)
         for i in range(self.nseg):
             for j in range(self.nseg):
-                ratios[i, j] = lengths[i] / lengths[j]
+                ratios[0, i, j] = lengths[i] / lengths[j]
 
         self.ratioss = np.concatenate([self.ratioss, ratios], axis=0)
 
@@ -69,16 +70,20 @@ class PoseMetrics():
 
     @property
     def recent_error(self):
-        nlast = min(100, len(self.errors))
-        return np.array(self.errors[-nlast:]).mean()
+        nlast = min(100, len(self._errors))
+        return np.array(self._errors[-nlast:]).mean()
 
     @property
     def error(self):
-        return np.array(self.errors).mean()
+        return np.array(self._errors).mean()
+
+    @property
+    def errors(self):
+        return np.array(self._errors)
 
     def flush(self):
         self.ratioss = np.empty([0, self.nseg, self.nseg], dtype=np.float32)
-        self.errors = []
+        self._errors = []
 
 
 class LossMetrics():
@@ -90,9 +95,9 @@ class LossMetrics():
         self.flush()
 
     def update(self, total, expect, entropy):
-        self._total.append(total)
-        self._expect.append(expect)
-        self._entropy.append(entropy)
+        self._total.append(total.detach().numpy())
+        self._expect.append(expect.detach().numpy())
+        self._entropy.append(entropy.detach().numpy())
 
     @property
     def total(self):
@@ -122,10 +127,21 @@ class GlobalMetrics():
         self.worst = PoseMetrics()
         self.top = PoseMetrics()
         self.bottom = PoseMetrics()
-        #self.gt = PoseMetrics()
         self.random = PoseMetrics()
         self.avg = PoseMetrics()
         self.wavg = PoseMetrics()
         self.triang = PoseMetrics()
 
         self.loss = LossMetrics()
+
+    @property
+    def to_triang(self):
+        return (self.wavg.errors - self.triang.errors).mean()
+
+    @property
+    def to_avg(self):
+        return (self.wavg.errors - self.avg.errors).mean()
+
+    @property
+    def to_random(self):
+        return (self.wavg.errors - self.random.errors).mean()

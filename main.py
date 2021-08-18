@@ -1,3 +1,4 @@
+from metrics import GlobalMetrics
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,6 +12,7 @@ from loss import ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
 from mvn.utils.vis import draw_3d_pose, CONNECTIVITY_DICT
 from options import parse_args
+from metrics import GlobalMetrics
 
 
 #CAM_IDXS = [3, 1]
@@ -69,8 +71,9 @@ if __name__ == '__main__':
     camera_dsac = CameraDSAC(opt.camera_hypotheses, opt.sample_size, opt.inlier_threshold, 
         opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
         opt.temp, opt.gumbel, opt.hard, camera_nn, camera_loss)
-    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, opt.entropy_to_scores,
-        opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, opt.weighted_selection, opt.weighted_beta, pose_nn, pose_loss)
+    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, 
+        opt.entropy_to_scores, opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, 
+        opt.weighted_selection, opt.exp_beta, opt.weighted_beta, pose_nn, pose_loss)
 
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,
@@ -79,6 +82,9 @@ if __name__ == '__main__':
                             num_workers=0, batch_size=None)
     test_dataloader  = DataLoader(test_set, shuffle=False,
                             num_workers=0, batch_size=None)
+
+    # Initialize global metrics.
+    global_metrics = GlobalMetrics()
 
     for epoch_idx in range(opt.num_epochs):
         camera_score = 0
@@ -199,78 +205,86 @@ if __name__ == '__main__':
             if not opt.camdsac_only:
                 Ks = gt_Ks
 
-                avg_total_loss = 0
+                all_total_loss = 0
 
                 num_frames = est_2d.shape[0]
                 for fidx in range(num_frames):
-                    pose_result = \
-                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d)
+                    total_loss, global_metrics, pool_metrics = \
+                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                    if opt.weighted_selection:
-                        total_loss, best_per_loss = pose_result
-                        print(total_loss.item(), best_per_loss[0].item())
-                    else:
-                        total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, avg_error, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
+                    #if opt.weighted_selection:
+                    #    total_loss, best_per_loss = pose_result
+                    #    print(total_loss.item(), best_per_loss[0].item())
+                    #else:
+                    #total_loss, exp_loss, entropy_loss, baseline_loss, weighted_error, avg_error, random_error, est_3d_pose, best_per_loss, best_per_score, rank, top_loss, bottom_loss = pose_result
 
-                        # Update metrics.
-                        mpjpe = weighted_error
-                        diff_to_baseline = weighted_error - baseline_loss
-                        diff_to_avg = weighted_error - avg_error
-                        diff_to_random = weighted_error - random_error
+                    # Update metrics.
+                    #mpjpe = weighted_error
+                    #diff_to_baseline = weighted_error - baseline_loss
+                    #diff_to_avg = weighted_error - avg_error
+                    #diff_to_random = weighted_error - random_error
 
-                        if len(ranks) == 100:
-                            ranks[:-1] = ranks[1:]; ranks[-1] = rank
-                            mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
-                            diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
-                            diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
-                            diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random                     
-                            top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
-                            bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
-                        else:
-                            ranks.append(rank)
-                            mpjpes.append(mpjpe)
-                            diffs_to_baseline.append(diff_to_baseline)
-                            diffs_to_avg.append(diff_to_avg)
-                            diffs_to_random.append(diff_to_random)
-                            top_losses.append(top_loss)
-                            bottom_losses.append(bottom_loss)
+                    #if len(ranks) == 100:
+                    #    ranks[:-1] = ranks[1:]; ranks[-1] = rank
+                    #    mpjpes[:-1] = mpjpes[1:]; mpjpes[-1] = mpjpe
+                    #    diffs_to_baseline[:-1] = diffs_to_baseline[1:]; diffs_to_baseline[-1] = diff_to_baseline
+                    #    diffs_to_avg[:-1] = diffs_to_avg[1:]; diffs_to_avg[-1] = diff_to_avg
+                    #    diffs_to_random[:-1] = diffs_to_random[1:]; diffs_to_random[-1] = diff_to_random                     
+                    #    top_losses[:-1] = top_losses[1:]; top_losses[-1] = top_loss
+                    #    bottom_losses[:-1] = bottom_losses[1:]; bottom_losses[-1] = bottom_loss
+                    #else:
+                    #    ranks.append(rank)
+                    #    mpjpes.append(mpjpe)
+                    #    diffs_to_baseline.append(diff_to_baseline)
+                    #    diffs_to_avg.append(diff_to_avg)
+                    #    diffs_to_random.append(diff_to_random)
+                    #    top_losses.append(top_loss)
+                    #    bottom_losses.append(bottom_loss)
 
-                        all_mpjpes += mpjpe.detach().numpy()
+                    #    all_mpjpes += mpjpe.detach().numpy()
                         #all_mpjpes += min(weighted_error, weighted_error_top).detach().numpy()
 
-                        mean_rank = torch.stack(ranks, dim=0).mean()
-                        mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
-                        mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
-                        mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
-                        mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
-                        mean_top_loss = torch.stack(top_losses, dim=0).mean()
-                        mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
+                    #    mean_rank = torch.stack(ranks, dim=0).mean()
+                    #    mean_mpjpe = torch.stack(mpjpes, dim=0).mean()
+                    #    mean_diff_to_baseline = torch.stack(diffs_to_baseline, dim=0).mean()
+                    #    mean_diff_to_avg = torch.stack(diffs_to_avg, dim=0).mean()
+                    #    mean_diff_to_random = torch.stack(diffs_to_random, dim=0).mean()
+                    #    mean_top_loss = torch.stack(top_losses, dim=0).mean()
+                    #    mean_bottom_loss = torch.stack(bottom_losses, dim=0).mean()
 
-                        # Log to stdout.
-                        print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [Rank: {mean_rank:.1f}, MPJPE: {mean_mpjpe:.2f}, Diff to [Baseline: {mean_diff_to_baseline:.2f}, Average: {mean_diff_to_avg:.2f}, Random: {mean_diff_to_random:.2f}], Top Loss: {mean_top_loss:.2f}, Bottom Loss: {mean_bottom_loss:.2f}]\n'
-                            f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
-                            f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
-                            f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
-                            f'\tWeighted Error: \t({weighted_error:.4f}, {avg_error:.4f}, {random_error:.4f})',
-                            flush=True
-                        )
+                    # Log to stdout.
+                    #print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [MPJPE: {metrics.wavg.error:.2f}, Diff to [4-triang: {metrics.to_triang:.2f}, Average: {metrics.to_avg:.2f}, Random: {metrics.to_random:.2f}], Top Error: {metrics.top.error:.2f}, Bottom Error: {metrics.bottom.error:.2f}]\n'
+                    #    f'\tBest (per) Loss: \t({best_per_loss[0].item():.4f}, {best_per_loss[1].item():.4f})\n'
+                    #    f'\tBest (per) Score: \t({best_per_score[0].item():.4f}, {best_per_score[1].item():.4f}) [{rank.int().item()}]\n'
+                    #    f'\tBaseline Loss: \t\t({baseline_loss:.4f})\n'
+                    #    f'\tWeighted Error: \t({weighted_error:.4f}, {avg_error:.4f}, {random_error:.4f})',
+                    #    flush=True
+                    #)
 
-                    avg_total_loss += total_loss
+                    print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration} ({fidx + 1}/{num_frames} frames), [MPJPE: {global_metrics.wavg.error:.2f}, Diff to [4-triang: {global_metrics.to_triang:.2f}, Average: {global_metrics.to_avg:.2f}, Random: {global_metrics.to_random:.2f}], Top Error: {global_metrics.top.error:.2f}, Bottom Error: {global_metrics.bottom.error:.2f}]\n'
+                        f'\tBest (per) Loss: \t({pool_metrics.best.loss.item():.4f}, {pool_metrics.best.score.item():.4f})\n'
+                        f'\tBest (per) Score: \t({pool_metrics.top.loss.item():.4f}, {pool_metrics.top.score.item():.4f})\n'
+                        f'\t4-triang Loss: \t\t({pool_metrics.triang.loss.item():.4f})\n'
+                        f'\tWeighted Error: \t({pool_metrics.wavg.loss.item():.4f}, {pool_metrics.avg.loss.item():.4f}, {pool_metrics.random.loss.item():.4f})',
+                        flush=True
+                    )
+
+                    all_total_loss += total_loss
 
                     if fidx % opt.pose_batch_size == 0 and fidx != 0:
-                        avg_total_loss.backward()
+                        all_total_loss.backward()
                         opt_pose_nn.step()
                         opt_pose_nn.zero_grad()
 
-                        avg_total_loss = 0
+                        all_total_loss = 0
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
-        if all_mpjpes > 0.:
-            mean_mpjpe = all_mpjpes / (num_frames * train_set.num_iterations)
-        else:
-            mean_mpjpe = 0.
-        print(f'Train epoch finished. Mean MPJPE: {mean_mpjpe}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
+        #if all_mpjpes > 0.:
+        #    mean_mpjpe = all_mpjpes / (num_frames * train_set.num_iterations)
+        #else:
+        #    mean_mpjpe = 0.
+        print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}, Camera score: {camera_score} (Rot error: {mean_rot_error}, Trans error: {mean_trans_error:.2f})')
 
         log_line += f'{epoch_idx}\t\t{mean_rot_error:.4f}\t\t{mean_trans_error:.4f}\t\t{mean_mpjpe:.4f}\t\t'
 

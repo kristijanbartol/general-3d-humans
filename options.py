@@ -50,6 +50,9 @@ def parse_args():
     parser.add_argument('--inlier_beta', '-ib', type=float, default=100.0,
         help='scaling factor within the sigmoid of the soft inlier count')
 
+    parser.add_argument('--exp_beta', type=float, default=1.,
+        help='the coeficient next to expectation loss component')
+
     parser.add_argument('--weighted_beta', type=float, default=0.05,
         help='the coeficient next to weighted triangulation loss component')
 

@@ -253,7 +253,7 @@ class PoseDSAC(DSAC):
     '''
 
     def __init__(self, hyps, num_joints, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, body_lengths_mode, weighted_selection, weighted_beta,
+            temp, gumbel, hard, body_lengths_mode, weighted_selection, exp_beta, weighted_beta,
             score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
@@ -269,6 +269,7 @@ class PoseDSAC(DSAC):
         self.min_entropy = min_entropy
         self.temp = temp
         self.weighted_beta = weighted_beta
+        self.exp_beta = exp_beta
         
         self.entropy_to_scores = entropy_to_scores
         self.gumbel = gumbel
@@ -294,7 +295,7 @@ class PoseDSAC(DSAC):
 
         return triangulate_point_from_multiple_views_linear_torch(Ps, points_2d)
 
-    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts, baseline=False):
+    def __sample_hyp(self, est_2d_pose, Ks, Rs, ts, calc_triang):
         '''
         Select a random subset of point correspondences and calculate R and t.
 
@@ -319,7 +320,7 @@ class PoseDSAC(DSAC):
         # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
         baseline_pose = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device) \
-            if baseline else None
+            if calc_triang else None
 
         for joint_idx in range(num_joints):
             cidxs = all_view_combinations[selected_combination_idxs[joint_idx]]
@@ -329,7 +330,7 @@ class PoseDSAC(DSAC):
                 est_2d_pose, joint_idx, Ks, Rs, ts, cidxs
             )
             # Do not calculate baseline more than once for efficiency.
-            if baseline:
+            if calc_triang:
                 baseline_pose[joint_idx] = self.__triangulate_joint(
                     est_2d_pose, joint_idx, Ks, Rs, ts, all_views_cidxs
                 )
@@ -387,14 +388,13 @@ class PoseDSAC(DSAC):
         #best_score_loss = 0
         #best_score_score = 0            # this one is a reference
 
-        baseline = False
+        #triang_obtained = False
         #selected_pose = None
 
         for h in range(0, self.hyps):
 
             # === Step 1: Sample hypothesis ===========================
-            calculate_baseline = True if baseline is None else False
-            sample_tuple = self.__sample_hyp(est_2d_pose, Ks, Rs, ts, calculate_baseline)
+            sample_tuple = self.__sample_hyp(est_2d_pose, Ks, Rs, ts, hpool.triang is None)
             sample = sample_tuple[0]
 
             # === Step 2: Score hypothesis using soft inlier count ====
@@ -402,14 +402,13 @@ class PoseDSAC(DSAC):
 
             # === Step 3: Calculate loss of hypothesis ================
             # TODO: Acquire baseline more nicely.
-            if not baseline:
-                hpool.set_baseline(sample_tuple[1])
-                baseline = True
+            if hpool.triang is None:
+                hpool.set_triang(sample_tuple[1])
                 #baseline_loss = self.loss_function(baseline, gt_3d)
             #loss = self.loss_function(sample, gt_3d)
 
             # Store results.
-            hpool.append(h, sample, score)
+            hpool.append(sample, score)
             #hyp_losses[h] = loss
             #hyp_scores[h] = score
             #hyps_3d[h] = sample
@@ -478,10 +477,11 @@ class PoseDSAC(DSAC):
         exp_loss = torch.sum(hpool.losses * hyp_scores_softmax)
         entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
-        total_loss = exp_loss + self.entropy_beta * softmax_entropy + self.weighted_beta * hpool.wavg.loss
+        total_loss = self.exp_beta * exp_loss + self.entropy_beta * softmax_entropy + self.weighted_beta * hpool.wavg.loss
 
         # Update metrics.
         metrics.loss.update(total_loss, exp_loss, entropy_loss)
+        # TODO: Could reduce the number of lines.
         metrics.best.update(hpool.best.loss, hpool.best.pose)
         metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
         metrics.top.update(hpool.top.loss, hpool.top.pose)
@@ -491,5 +491,5 @@ class PoseDSAC(DSAC):
         metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)
         metrics.triang.update(hpool.triang.loss, hpool.triang.pose)
 
-        return metrics
+        return total_loss, metrics, hpool
         #return total_loss, exp_loss, entropy_loss, baseline_loss, weighted_loss, avg_pose_loss, random_pose_loss, selected_pose, best_loss, best_score, hyp_rank, top_loss, bottom_loss
