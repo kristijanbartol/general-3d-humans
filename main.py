@@ -14,6 +14,7 @@ from mvn.utils.vis import draw_3d_pose, CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
+from visualize import draw
 
 
 #CAM_IDXS = [3, 1]
@@ -86,6 +87,7 @@ if __name__ == '__main__':
 
     # Initialize global metrics.
     global_metrics = GlobalMetrics()
+    min_mean_mpjpe = 100.
 
     for epoch_idx in range(opt.num_epochs):
         camera_score = 0
@@ -209,7 +211,9 @@ if __name__ == '__main__':
 
                         all_total_loss = 0
                         
-                    log_stdout('TRAIN', epoch_idx, global_metrics, pool_metrics)
+                    log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+
+                draw(session_id, epoch_idx, iteration, 'train', pool_metrics)
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
@@ -290,7 +294,9 @@ if __name__ == '__main__':
                     _, global_metrics, pool_metrics = \
                         pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                    log_stdout('VALID', epoch_idx, global_metrics, pool_metrics)
+                    log_stdout('VALID', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+                
+                draw(session_id, epoch_idx, iteration, 'valid', pool_metrics)
             #############
 
         mean_rot_error = all_rot_errors / valid_set.num_iterations
@@ -407,14 +413,16 @@ if __name__ == '__main__':
 
                     for fidx in range(num_frames):
                         _, global_metrics, pool_metrics = \
-                            pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d)
+                            pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
                         # TODO: Remove this?
                         if opt.filter_bad:
                             if pool_metrics.wavg.loss > 100.:
                                 continue
 
-                            log_stdout('TEST', epoch_idx, global_metrics, pool_metrics)
+                        log_stdout('TEST', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+
+                    draw(session_id, epoch_idx, iteration, 'test', pool_metrics)
                 #############
             num_samples = test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]
 

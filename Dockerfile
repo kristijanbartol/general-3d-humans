@@ -57,6 +57,8 @@ RUN python3.7 -m pip install \
 	h5py==2.10.0 \
 #	mayavi \
 	scikit-learn \
+	plotly \
+	kaleido \
 	poseval@git+https://github.com/svenkreiss/poseval.git
 #RUN python3.7 -m pip install --no-cache-dir -e .
 WORKDIR /poseDSAC
