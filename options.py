@@ -12,13 +12,16 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
+    parser.add_argument('--dataset', type=str, default='human36m',
+        help='the dataset (either human36m or cmu-panoptic)')
+
     parser.add_argument('--layers_camdsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
         help='number of neurons per layer')
 
     parser.add_argument('--layers_posedsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
         help='number of neurons per layer')
 
-    parser.add_argument('--camera_list', type=int, nargs='+', default=[0, 1, 2, 3])
+    parser.add_argument('--cam_idxs', type=int, nargs='+', default=[0, 1, 2, 3])
 
     parser.add_argument('--camera_hypotheses', '-chyps', type=int, default=100,
         help='number of sampled hypotheses in every cameraDSAC iteration')

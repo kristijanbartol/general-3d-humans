@@ -7,10 +7,10 @@ import os
 import kornia
 
 from dsac import CameraDSAC, PoseDSAC
-from dataset import SparseDataset, TRAIN, VALID, TEST
+from dataset import Human36MDataset, CmuPanopticDataset, TRAIN, VALID, TEST
 from loss import ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
-from mvn.utils.vis import draw_3d_pose, CONNECTIVITY_DICT
+from mvn.utils.vis import CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
@@ -18,7 +18,7 @@ from visualize import draw
 
 
 #CAM_IDXS = [3, 1]
-CAM_IDXS = [0, 1, 2, 3]
+#CAM_IDXS = [0, 1, 2, 3]
 
 
 if __name__ == '__main__':
@@ -31,9 +31,11 @@ if __name__ == '__main__':
     logger.write('Iter\tTrain\t\tValid\t\tTest\t\tBaseline\n')
 
     # Create datasets.
-    train_set = SparseDataset(opt.rootdir, TRAIN, CAM_IDXS, opt.num_joints, opt.num_frames, opt.train_iterations)
-    valid_set = SparseDataset(opt.rootdir, VALID, CAM_IDXS, opt.num_joints, opt.num_frames, opt.valid_iterations)
-    test_set  = SparseDataset(opt.rootdir, TEST, CAM_IDXS, opt.num_joints, opt.num_frames, None)
+    dataset = Human36MDataset if opt.dataset == 'human36m' else CmuPanopticDataset
+    data_rootdir = os.path.join(opt.rootdir, opt.dataset)
+    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
+    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+    test_set  = dataset(data_rootdir, TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, None)
 
     mean_3d = train_set.mean_3d
     std_3d = train_set.std_3d
@@ -117,7 +119,7 @@ if __name__ == '__main__':
                 not_all_positive = False
 
                 # Estimated camera parameters for each pair.
-                # NOTE: To test CamDSAC on a single pair, set CAM_IDXS in SparseDataset.
+                # NOTE: To test CamDSAC on a single pair, set CAM_IDXS in the dataset.py.
                 Rs = []
                 ts = []
 

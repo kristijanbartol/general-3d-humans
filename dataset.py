@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import os
-import math
 import random
 
 from torch.utils.data import Dataset
@@ -42,10 +41,10 @@ ORD_SUBJECT_MAP = {
 }
 
 
-class SparseDataset(Dataset):
-    '''Temporary dataset class for Human3.6M dataset.'''
+class Human36MDataset(Dataset):
+    '''A Dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50000):
+    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
@@ -209,5 +208,110 @@ class SparseDataset(Dataset):
         Ks = torch.from_numpy(np.array(Ks))
         Rs = torch.from_numpy(np.array(Rs))
         ts = torch.from_numpy(np.array(ts))
+
+        return point_corresponds, selected_preds, selected_gt_3d, Ks, Rs, ts
+
+
+CMU_TO_H36M_MAP = (
+    (0,  1, 2,  3,  4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 16),     # Human36M
+    (2, 12, 13, 14, 6, 7, 8, 0, 1,  3,  4,  5,  9, 10, 11)      # CMUPanoptic
+)
+
+
+class CmuPanopticDataset(Dataset):
+
+    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50):
+        self.rootdir = rootdir
+        self.data_type = data_type
+        self.cam_idxs = cam_idxs
+        self.num_joints = num_joints
+        self.num_frames = num_frames
+        self.num_iterations = num_iterations
+
+        self.num_views = len(self.cam_idxs)
+
+        # Load data.
+        self.Ks, self.Rs, self.ts = self.__load_camera_params(cam_idxs)
+        self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))
+        self.gt_3d = np.load(os.path.join(self.rootdir, 'all_3d_gt.npy'))
+        self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy')).reshape(
+            (-1, self.num_views, 2, 2))
+
+        # Unbbox keypoints.
+        bbox_height = np.abs(self.bboxes[:, :, 0, 0] - self.bboxes[:, :, 1, 0])
+        self.preds_2d *= np.expand_dims(
+            np.expand_dims(bbox_height / 384., axis=-1), axis=-1)
+        self.preds_2d += np.expand_dims(self.bboxes[:, :, 0, :], axis=2)
+
+        # Dataset statistics (for normalization).
+        self.mean_3d = np.mean(self.gt_3d, axis=0)
+        self.std_3d = np.std(self.gt_3d, axis=0)
+
+    @staticmethod
+    def __load_camera_params(cam_idxs):
+        '''Loading camera parameters for given subject and camera subset.
+
+        Loads camera parameters for a given subject and subset cameras.
+        subject_idx --- subject index
+        cam_idxs --- subset of camera indexes
+        '''
+        labels = np.load('/data/cmupanoptic/cmu-multiview-labels-MRCNNbboxes.npy', 
+            allow_pickle=True).item()
+        camera_params = labels['cameras'][0]
+
+        Ks, Rs, ts = [], [], []
+        for cam_idx in cam_idxs:
+            Ks.append(camera_params[cam_idx][2])
+            Rs.append(camera_params[cam_idx][0])
+            ts.append(camera_params[cam_idx][1])
+
+        Ks = np.stack(Ks, axis=0)
+        Rs = np.stack(Rs, axis=0)
+        ts = np.stack(ts, axis=0)
+
+        return Ks, Rs, ts
+
+    @staticmethod
+    def __cmu_to_h36m(cmu_kpts):
+        h36m_kpts = np.empty((cmu_kpts.shape[0], 17, cmu_kpts.shape[2]))
+        h36m_kpts[:, CMU_TO_H36M_MAP[0], :] = cmu_kpts[:, CMU_TO_H36M_MAP[1], :]
+        h36m_kpts[:, 7, :] = np.mean(cmu_kpts[:, [0, 2], :], axis=1)
+        h36m_kpts[:, 10, :] = np.mean(cmu_kpts[:, [15, 16, 17, 18], :], axis=1)
+        return h36m_kpts
+
+    def __len__(self):
+        return self.num_iterations
+
+    def __getitem__(self, idx):
+        '''
+        Get random subset of point correspondences from the preset number of frames.
+
+        Return:
+        -------
+        batch_point_corresponds -- [(C-1)xPx2x2]
+        selected_gt_3d -- [FxJx3]
+        batch_Ks -- [Cx2x3x3]
+        batch_Rs -- [Cx2x3x3]
+        batch_ts -- [Cx2x3x1]
+        '''
+        # Selecting a subset of frames.
+        selected_frames = np.random.choice(
+            np.arange(self.preds_2d.shape[0]), size=self.num_frames)
+
+        # Select 2D predictions, 3D GT, and camera parameters 
+        # for a given random subject and selected frames.
+        selected_preds = self.preds_2d[selected_frames]
+        selected_gt_3d = self.__cmu_to_h36m(self.gt_3d[selected_frames])
+
+        # All points stacked along a single dimension for a single subject.
+        point_corresponds = np.concatenate(
+            np.split(selected_preds, selected_preds.shape[0], axis=0), axis=2)[0]
+
+        point_corresponds = torch.from_numpy(np.array(point_corresponds))
+        selected_preds = torch.from_numpy(selected_preds) 
+        selected_gt_3d = torch.from_numpy(selected_gt_3d)
+        Ks = torch.from_numpy(self.Ks)
+        Rs = torch.from_numpy(self.Rs)
+        ts = torch.from_numpy(self.ts)
 
         return point_corresponds, selected_preds, selected_gt_3d, Ks, Rs, ts

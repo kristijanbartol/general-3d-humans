@@ -11,5 +11,5 @@ fi
 docker run --rm --gpus all --name kbartol-posedsac -it \
 	-v ${REPO_DIR}:/poseDSAC \
 	-v ${BASE_DATA_DIR}/human36m/:/data/human36m/ \
-	-v ${BASE_DATA_DIR}/cmupanoptic/:/data/cmupanoptic/ kbartol-posedsac
+	-v /media/kristijan/kristijan-hdd-ex/panoptic-toolbox/scripts/:/data/cmupanoptic/ kbartol-posedsac
 
