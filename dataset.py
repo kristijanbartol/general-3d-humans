@@ -5,6 +5,8 @@ import random
 
 from torch.utils.data import Dataset
 
+from visualize import draw
+
 
 TRAIN_SIDXS = [1, 5, 6, 7]
 VAL_SIDXS = [8]
@@ -213,8 +215,8 @@ class Human36MDataset(Dataset):
 
 
 CMU_TO_H36M_MAP = (
-    (0,  1, 2,  3,  4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 16),     # Human36M
-    (2, 12, 13, 14, 6, 7, 8, 0, 1,  3,  4,  5,  9, 10, 11)      # CMUPanoptic
+    (0, 1, 2,  3,  4,  5, 6, 8, 9, 10, 11, 12, 13, 14, 15),     # Human36M
+    (8, 7, 6, 12, 13, 14, 2, 0, 1, 5,  4,  3,  9, 10, 11)      # CMUPanoptic
 )
 
 
@@ -232,10 +234,14 @@ class CmuPanopticDataset(Dataset):
 
         # Load data.
         self.Ks, self.Rs, self.ts = self.__load_camera_params(cam_idxs)
-        self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))
+        # TODO: Improve camera index selection.
+        self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))[:, 1:]
         self.gt_3d = np.load(os.path.join(self.rootdir, 'all_3d_gt.npy'))
-        self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy')).reshape(
+        self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy'))[:, 1:].reshape(
             (-1, self.num_views, 2, 2))
+
+        # CMU to H36M.
+        self.gt_3d = self.__cmu_to_h36m(self.gt_3d)
 
         # Unbbox keypoints.
         bbox_height = np.abs(self.bboxes[:, :, 0, 0] - self.bboxes[:, :, 1, 0])
@@ -273,10 +279,10 @@ class CmuPanopticDataset(Dataset):
 
     @staticmethod
     def __cmu_to_h36m(cmu_kpts):
-        h36m_kpts = np.empty((cmu_kpts.shape[0], 17, cmu_kpts.shape[2]))
+        h36m_kpts = np.empty((cmu_kpts.shape[0], 17, cmu_kpts.shape[2]), dtype=np.float32)
         h36m_kpts[:, CMU_TO_H36M_MAP[0], :] = cmu_kpts[:, CMU_TO_H36M_MAP[1], :]
         h36m_kpts[:, 7, :] = np.mean(cmu_kpts[:, [0, 2], :], axis=1)
-        h36m_kpts[:, 10, :] = np.mean(cmu_kpts[:, [15, 16, 17, 18], :], axis=1)
+        h36m_kpts[:, 16, :] = np.mean(cmu_kpts[:, [15, 16, 17, 18], :], axis=1)
         return h36m_kpts
 
     def __len__(self):
@@ -301,7 +307,7 @@ class CmuPanopticDataset(Dataset):
         # Select 2D predictions, 3D GT, and camera parameters 
         # for a given random subject and selected frames.
         selected_preds = self.preds_2d[selected_frames]
-        selected_gt_3d = self.__cmu_to_h36m(self.gt_3d[selected_frames])
+        selected_gt_3d = self.gt_3d[selected_frames]
 
         # All points stacked along a single dimension for a single subject.
         point_corresponds = np.concatenate(

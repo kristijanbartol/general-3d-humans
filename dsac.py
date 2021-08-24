@@ -313,8 +313,10 @@ class PoseDSAC(DSAC):
         #for l in range(3, num_cameras + 1):
             all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
         selected_combination_idxs = np.random.choice(
-            np.arange(len(all_view_combinations)), size=num_joints,
-            p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
+            np.arange(len(all_view_combinations)), size=num_joints)
+        #selected_combination_idxs = np.random.choice(
+        #    np.arange(len(all_view_combinations)), size=num_joints,
+        #    p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
             #p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
 
         # For each joint, use the selected view subsets to triangulate points.

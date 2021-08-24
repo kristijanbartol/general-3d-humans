@@ -8,6 +8,7 @@ def mpjpe(est, gt):
 
 def center_pelvis(pose_3d):
     return pose_3d - pose_3d[6, :]
+    #return pose_3d
 
 
 def rel_mpjpe(est, gt):
