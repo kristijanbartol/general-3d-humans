@@ -60,6 +60,7 @@ RUN python3.7 -m pip install \
 	plotly \
 	kaleido \
 	pandas \
+	numpy==1.20.0
 	poseval@git+https://github.com/svenkreiss/poseval.git
 #RUN python3.7 -m pip install --no-cache-dir -e .
 WORKDIR /poseDSAC
