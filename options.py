@@ -116,6 +116,9 @@ def parse_args():
     parser.add_argument('--test', dest='test', action='store_true',
         help='whether to test on test set')
 
+    parser.add_argument('--transfer', dest='transfer', action='store_true',
+        help='use transfer learning from CMU to H36M')
+
     parser.add_argument('--filter_bad', dest='filter_bad', action='store_true',
         help='if using test, whether to filter bad 3D GT')
 

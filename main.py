@@ -17,10 +17,6 @@ from log import log_stdout, log_line
 from visualize import draw, __draw_pose
 
 
-#CAM_IDXS = [3, 1]
-#CAM_IDXS = [0, 1, 2, 3]
-
-
 if __name__ == '__main__':
     # Parse command line args.
     opt, session_id, hyperparams_string = parse_args()
@@ -35,7 +31,10 @@ if __name__ == '__main__':
     data_rootdir = os.path.join(opt.rootdir, opt.dataset)
     train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
     valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
-    test_set  = dataset(data_rootdir, TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, None)
+    if opt.transfer:
+        test_set  = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], opt.num_joints, opt.num_frames, None)
+    else:
+        valid_set = dataset(data_rootdir, TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
 
     mean_3d = train_set.mean_3d
     std_3d = train_set.std_3d

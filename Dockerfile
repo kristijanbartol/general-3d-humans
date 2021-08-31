@@ -42,7 +42,7 @@ RUN python3.7 -m pip install \
 	kiwisolver==1.1.0 \
 	matplotlib==3.1.1 \
 	networkx==2.3 \
-	numpy==1.17.2 \
+	numpy \
 	opencv-python==4.1.2.30 \
 	Pillow==6.2.0 \
 	protobuf==3.10.0 \
@@ -60,7 +60,6 @@ RUN python3.7 -m pip install \
 	plotly \
 	kaleido \
 	pandas \
-	numpy==1.20.0
 	poseval@git+https://github.com/svenkreiss/poseval.git
 #RUN python3.7 -m pip install --no-cache-dir -e .
 WORKDIR /poseDSAC

@@ -233,11 +233,13 @@ class CmuPanopticDataset(Dataset):
         self.num_views = len(self.cam_idxs)
 
         # Load data.
-        self.Ks, self.Rs, self.ts = self.__load_camera_params(cam_idxs)
+        self.Ks, self.Rs, self.ts = self.__load_camera_params()
         # TODO: Improve camera index selection.
-        self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))[:, 1:]
+        #self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))[:, -10:]
+        self.preds_2d = np.load(os.path.join(self.rootdir, 'all_2d_preds.npy'))[:, self.cam_idxs]
         self.gt_3d = np.load(os.path.join(self.rootdir, 'all_3d_gt.npy'))
-        self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy'))[:, 1:].reshape(
+        #self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy'))[:, -10:].reshape(
+        self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy'))[:, self.cam_idxs].reshape(
             (-1, self.num_views, 2, 2))
 
         # CMU to H36M.
@@ -253,8 +255,7 @@ class CmuPanopticDataset(Dataset):
         self.mean_3d = np.mean(self.gt_3d, axis=0)
         self.std_3d = np.std(self.gt_3d, axis=0)
 
-    @staticmethod
-    def __load_camera_params(cam_idxs):
+    def __load_camera_params(self):
         '''Loading camera parameters for given subject and camera subset.
 
         Loads camera parameters for a given subject and subset cameras.
@@ -266,7 +267,7 @@ class CmuPanopticDataset(Dataset):
         camera_params = labels['cameras'][0]
 
         Ks, Rs, ts = [], [], []
-        for cam_idx in cam_idxs:
+        for cam_idx in self.cam_idxs:
             Ks.append(camera_params[cam_idx][2])
             Rs.append(camera_params[cam_idx][0])
             ts.append(camera_params[cam_idx][1])
