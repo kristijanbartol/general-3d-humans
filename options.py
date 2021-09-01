@@ -12,8 +12,8 @@ def parse_args():
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
 
-    parser.add_argument('--dataset', type=str, default='human36m',
-        help='the dataset (either human36m or cmu-panoptic)')
+    #parser.add_argument('--dataset', type=str, default='human36m',
+    #    help='the dataset (either human36m or cmu)')
 
     parser.add_argument('--layers_camdsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
         help='number of neurons per layer')
@@ -137,5 +137,10 @@ def parse_args():
     #sid = f'chyps{opt.camera_hypotheses}_cphyps{opt.pose_hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
     session_id = datetime.now().strftime('%d-%b-%Y_%H:%M:%S')
     hyperparams_string = json.dumps(vars(opt), indent=4)
+
+    if opt.transfer_mode[0] == -1 or (opt.transfer_mode[0] == 2 and opt.transfer_mode[1] == 1):
+        opt.dataset = 'human36m'
+    else:
+        opt.dataset = 'cmu'
 
     return opt, session_id, hyperparams_string

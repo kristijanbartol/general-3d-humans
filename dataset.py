@@ -264,7 +264,7 @@ class CmuPanopticDataset(Dataset):
         subject_idx --- subject index
         cam_idxs --- subset of camera indexes
         '''
-        labels = np.load('/data/cmupanoptic/cmu-multiview-labels-MRCNNbboxes.npy', 
+        labels = np.load('/data/cmu/cmu-multiview-labels-MRCNNbboxes.npy', 
             allow_pickle=True).item()
         camera_params = labels['cameras'][0]
 
@@ -356,13 +356,13 @@ def init_datasets(opt):
 
         elif opt.transfer_mode[0] == 0:     # transfer camera configuration
             dataset = CmuPanopticDataset
-            data_rootdir = './results/cmu-panoptic'
+            data_rootdir = './results/cmu'
             test_cam_idxs = generate_test_cam_idxs(len(opt.cam_idxs))
             test_valid_iterations = opt.valid_iterations
 
         elif opt.transfer_mode[0] == 1:
             dataset = CmuPanopticDataset
-            data_rootdir = './results/cmu-panoptic'
+            data_rootdir = './results/cmu'
             test_num_cameras = opt.transfer_mode[1]
             test_cam_idxs = generate_test_cam_idxs(test_num_cameras)
             test_valid_iterations = opt.valid_iterations
@@ -373,12 +373,12 @@ def init_datasets(opt):
 
     if opt.transfer_mode[0] == 2:
         if opt.transfer_mode[1] == 0:   # cmu -> h36m
-            train_set = CmuPanopticDataset('./results/cmu-panoptic', TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
-            valid_set = CmuPanopticDataset('./results/cmu-panoptic', VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+            train_set = CmuPanopticDataset('./results/cmu', TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
+            valid_set = CmuPanopticDataset('./results/cmu', VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
             test_set = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], opt.num_joints, opt.num_frames, None)
         elif opt.transfer_mode[1] == 1: # h36m -> cmu
             train_set = Human36MDataset('./results/human36m', TRAIN, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.train_iterations)
             valid_set = Human36MDataset('./results/human36m', VALID, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.valid_iterations)
-            test_set = CmuPanopticDataset('./results/cmu-panoptic', TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+            test_set = CmuPanopticDataset('./results/cmu', TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
 
     return train_set, valid_set, test_set
