@@ -94,6 +94,10 @@ def parse_args():
     parser.add_argument('--body_lengths_mode', type=int, default=0,
         help='0 - use keypoints only, 1 - along with body lengths, 2 - body lengths only')
 
+    parser.add_argument('--transfer_mode', type=int, nargs='+', default=[-1],
+        help='use transfer learning and in which mode (-1 no transfer, 0 - camera config'
+             '1 - # cameras, additionally specify #, 2 - additionally set 0 for cmu->h36m and 1 for reverse')
+
     parser.add_argument('--pose_batch_size', type=int, default=16,
         help='number of frames after which the gradients are applied')
 
@@ -115,9 +119,6 @@ def parse_args():
 
     parser.add_argument('--test', dest='test', action='store_true',
         help='whether to test on test set')
-
-    parser.add_argument('--transfer', dest='transfer', action='store_true',
-        help='use transfer learning from CMU to H36M')
 
     parser.add_argument('--filter_bad', dest='filter_bad', action='store_true',
         help='if using test, whether to filter bad 3D GT')

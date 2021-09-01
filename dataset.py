@@ -242,6 +242,8 @@ class CmuPanopticDataset(Dataset):
         self.bboxes = np.load(os.path.join(self.rootdir, 'all_bboxes.npy'))[:, self.cam_idxs].reshape(
             (-1, self.num_views, 2, 2))
 
+        self.num_samples = self.preds_2d.shape[0]
+
         # CMU to H36M.
         self.gt_3d = self.__cmu_to_h36m(self.gt_3d)
 
@@ -302,8 +304,19 @@ class CmuPanopticDataset(Dataset):
         batch_ts -- [Cx2x3x1]
         '''
         # Selecting a subset of frames.
-        selected_frames = np.random.choice(
-            np.arange(self.preds_2d.shape[0]), size=self.num_frames)
+        if self.data_type == TRAIN:
+            selected_frames = np.random.choice(
+                np.arange(int(self.num_samples * 0.6)), 
+                size=self.num_frames
+            )
+        elif self.data_type == VALID:
+            selected_frames = np.random.choice(
+                np.arange(int(self.num_samples * 0.6) + 1, int(self.num_samples * 0.8)), 
+                size=self.num_frames)
+        elif self.data_type == TEST:
+            selected_frames = np.random.choice(
+                np.arange(int(self.num_samples * 0.8) + 1, self.num_samples), 
+                size=self.num_frames)
 
         # Select 2D predictions, 3D GT, and camera parameters 
         # for a given random subject and selected frames.
@@ -322,3 +335,50 @@ class CmuPanopticDataset(Dataset):
         ts = torch.from_numpy(self.ts)
 
         return point_corresponds, selected_preds, selected_gt_3d, Ks, Rs, ts
+
+
+
+def init_datasets(opt):
+
+    def generate_test_cam_idxs(num_cameras):
+        test_cam_idxs = np.arange(31)
+        test_cam_idxs = np.delete(test_cam_idxs, opt.cam_idxs)
+        return test_cam_idxs[np.random.choice(
+            test_cam_idxs.shape[0], num_cameras, replace=False)]
+
+
+    if opt.transfer_mode[0] < 2:
+        if opt.transfer_mode[0] == -1:      # no transfer
+            dataset = Human36MDataset if opt.dataset == 'human36m' else CmuPanopticDataset
+            data_rootdir = f'./results/{opt.dataset}'
+            test_cam_idxs = opt.cam_idxs
+            test_valid_iterations = None
+
+        elif opt.transfer_mode[0] == 0:     # transfer camera configuration
+            dataset = CmuPanopticDataset
+            data_rootdir = './results/cmu-panoptic'
+            test_cam_idxs = generate_test_cam_idxs(len(opt.cam_idxs))
+            test_valid_iterations = opt.valid_iterations
+
+        elif opt.transfer_mode[0] == 1:
+            dataset = CmuPanopticDataset
+            data_rootdir = './results/cmu-panoptic'
+            test_num_cameras = opt.transfer_mode[1]
+            test_cam_idxs = generate_test_cam_idxs(test_num_cameras)
+            test_valid_iterations = opt.valid_iterations
+
+        train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
+        valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+        test_set = dataset(data_rootdir, TEST, test_cam_idxs, opt.num_joints, opt.num_frames, test_valid_iterations)
+
+    if opt.transfer_mode[0] == 2:
+        if opt.transfer_mode[1] == 0:   # cmu -> h36m
+            train_set = CmuPanopticDataset('./results/cmu-panoptic', TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
+            valid_set = CmuPanopticDataset('./results/cmu-panoptic', VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+            test_set = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], opt.num_joints, opt.num_frames, None)
+        elif opt.transfer_mode[1] == 1: # h36m -> cmu
+            train_set = Human36MDataset('./results/human36m', TRAIN, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.train_iterations)
+            valid_set = Human36MDataset('./results/human36m', VALID, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.valid_iterations)
+            test_set = CmuPanopticDataset('./results/cmu-panoptic', TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+
+    return train_set, valid_set, test_set
