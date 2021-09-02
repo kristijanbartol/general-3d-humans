@@ -142,27 +142,27 @@ class HypothesisPool():
     def set_triang(self, pose) -> None:
         self.triang = Hypothesis(pose, self.gt_3d, self.loss_fun)
 
-    def get_qualitative_hyps(self):
-        hyps = OrderedDict()
-        hyps['wavg'] = self.wavg.pose.detach().numpy()
-        hyps['top'] = self.top.pose.detach().numpy()
-        hyps['bottom'] = self.bottom.pose.detach().numpy()
-        hyps['random'] = self.random.pose.detach().numpy()
-        hyps['triang'] = self.triang.pose.detach().numpy()
-        hyps['gt'] = self.gt.pose.detach().numpy()
+    def get_qualitative_hyps_dict(self):
+        hyps_dict = OrderedDict()
+        hyps_dict['wavg'] = self.wavg.pose.detach().numpy()
+        hyps_dict['top'] = self.top.pose.detach().numpy()
+        hyps_dict['bottom'] = self.bottom.pose.detach().numpy()
+        hyps_dict['random'] = self.random.pose.detach().numpy()
+        hyps_dict['triang'] = self.triang.pose.detach().numpy()
+        hyps_dict['gt'] = self.gt.pose.detach().numpy()
 
-        return hyps
+        return hyps_dict
 
-    def get_quantitative_hyps(self):
-        hyps = OrderedDict()
-        hyps['best'] = self.best.loss.detach().numpy()
-        hyps['wavg'] = self.wavg.loss.detach().numpy()
-        hyps['avg'] = self.avg.loss.detach().numpy()
-        hyps['top'] = self.top.loss.detach().numpy()
-        hyps['random'] = self.random.loss.detach().numpy()
-        hyps['bottom'] = self.bottom.loss.detach().numpy()
-        hyps['worst'] = self.worst.loss.detach().numpy()
-        hyps['triang'] = self.triang.loss.detach().numpy()
-        hyps['ransac'] = 27.4       # from Iskakov et al. '19
+    def get_quantitative_hyps_dict(self):
+        hyps_dict = OrderedDict()
+        hyps_dict['best'] = self.best.loss.detach().numpy()
+        hyps_dict['wavg'] = self.wavg.loss.detach().numpy()
+        hyps_dict['avg'] = self.avg.loss.detach().numpy()
+        hyps_dict['top'] = self.top.loss.detach().numpy()
+        hyps_dict['random'] = self.random.loss.detach().numpy()
+        hyps_dict['bottom'] = self.bottom.loss.detach().numpy()
+        hyps_dict['worst'] = self.worst.loss.detach().numpy()
+        hyps_dict['triang'] = self.triang.loss.detach().numpy()
+        hyps_dict['ransac'] = 27.4       # from Iskakov et al. '19
 
-        return hyps
+        return hyps_dict

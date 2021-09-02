@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import torch
 import numpy as np
 
@@ -117,5 +118,17 @@ class GlobalMetrics():
         for attribute in list(self.__dict__):
             self.__dict__[attribute].flush()
 
-    #def get_quantitative_metrics(self):
+    def get_quantitative_metrics_dict(self):
+        # TODO: Simplify this.
+        metrics_dict = OrderedDict()
+        metrics_dict['best'] = [self.best.error]
+        metrics_dict['wavg'] = [self.wavg.error]
+        metrics_dict['avg'] = [self.avg.error]
+        metrics_dict['top'] = [self.top.error]
+        metrics_dict['random'] = [self.random.error]
+        metrics_dict['bottom'] = [self.bottom.error]
+        metrics_dict['worst'] = [self.worst.error]
+        metrics_dict['triang'] = [self.triang.error]
+        metrics_dict['ransac'] = [27.4]
 
+        return metrics_dict
