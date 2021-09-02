@@ -7,8 +7,10 @@ def mpjpe(est, gt):
 
 
 def center_pelvis(pose_3d):
-    return pose_3d - pose_3d[6, :]
-    #return pose_3d
+    if pose_3d.shape[0] == 17:
+        return pose_3d - pose_3d[6, :]
+    else:
+        return pose_3d - pose_3d[2, :]
 
 
 def rel_mpjpe(est, gt):
@@ -87,40 +89,6 @@ class PoseMetrics():
         self._errors = []
 
 
-class LossMetrics():
-
-    def __init__(self):
-        self._total = None
-        self._expect = None
-        self._entropy = None
-        self.flush()
-
-    def update(self, total, expect, entropy):
-        self._total.append(total.detach().numpy())
-        self._expect.append(expect.detach().numpy())
-        self._entropy.append(entropy.detach().numpy())
-
-    @property
-    def total(self):
-        nlast = min(100, len(self._total))
-        return np.array(self._total[-nlast:]).mean()
-
-    @property
-    def expect(self):
-        nlast = min(100, len(self._expect))
-        return np.array(self._expect[-nlast:]).mean()
-
-    @property
-    def entropy(self):
-        nlast = min(100, len(self._entropy))
-        return np.array(self._entropy[-nlast:]).mean()
-
-    def flush(self):
-        self._total = []
-        self._expect = []
-        self._entropy = []
-
-
 class GlobalMetrics():
 
     def __init__(self):
@@ -132,8 +100,6 @@ class GlobalMetrics():
         self.avg = PoseMetrics()
         self.wavg = PoseMetrics()
         self.triang = PoseMetrics()
-
-        self.loss = LossMetrics()
 
     @property
     def diff_to_triang(self):
@@ -150,3 +116,6 @@ class GlobalMetrics():
     def flush(self):
         for attribute in list(self.__dict__):
             self.__dict__[attribute].flush()
+
+    #def get_quantitative_metrics(self):
+

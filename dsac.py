@@ -400,7 +400,6 @@ class PoseDSAC(DSAC):
             softmax_entropy = -torch.sum(hpool.scores * torch.log(hyp_scores_softmax))
         else:
             softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
-        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
 
         # Expectation loss.
         hpool.losses /= hpool.losses.max()
@@ -412,7 +411,6 @@ class PoseDSAC(DSAC):
             self.exp_beta * exp_loss
 
         # Update metrics.
-        metrics.loss.update(total_loss, exp_loss, entropy_loss)
         # TODO: Could reduce the number of lines.
         metrics.best.update(hpool.best.loss, hpool.best.pose)
         metrics.worst.update(hpool.worst.loss, hpool.worst.pose)

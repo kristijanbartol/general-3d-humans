@@ -1,11 +1,12 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import seaborn as sns
 import os
 
 from mvn.utils.vis import CONNECTIVITY_DICT
 
 
-def draw(session_id, epoch_idx, iteration, dataset, data_type, pool_metrics):
+def store_qualitative(session_id, epoch_idx, iteration, dataset, data_type, pool_metrics):
     dir_path = os.path.join('vis', f'{session_id}')
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
@@ -47,3 +48,15 @@ def draw(session_id, epoch_idx, iteration, dataset, data_type, pool_metrics):
     # Save figure.
     fig.write_image(fig_path + '.png')
     fig.write_html(fig_path + '.html')
+
+
+def store_quantitative(session_id, epoch_idx, dataset, data_type, global_metrics):
+    dir_path = os.path.join('vis', f'{session_id}')
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    fig_path = os.path.join(dir_path, f'{epoch_idx}_{dataset}_{data_type}')
+
+    sns.set_theme(style="darkgrid")
+
+    sns.barplot()

@@ -5,8 +5,6 @@ import random
 
 from torch.utils.data import Dataset
 
-from visualize import draw
-
 
 TRAIN_SIDXS = [1, 5, 6, 7]
 VAL_SIDXS = [8]

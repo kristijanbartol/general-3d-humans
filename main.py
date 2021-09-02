@@ -14,7 +14,7 @@ from mvn.utils.vis import CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
-from visualize import draw
+from visualize import store_qualitative, store_quantitative
 
 
 if __name__ == '__main__':
@@ -217,7 +217,9 @@ if __name__ == '__main__':
                         
                     log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
 
-                    draw(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+                store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+
+            store_quantitative(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
@@ -300,7 +302,7 @@ if __name__ == '__main__':
 
                     log_stdout('VALID', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
                 
-                draw(session_id, epoch_idx, iteration, opt.dataset, 'valid', pool_metrics)
+                store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'valid', pool_metrics)
             #############
 
         mean_rot_error = all_rot_errors / valid_set.num_iterations
@@ -426,7 +428,7 @@ if __name__ == '__main__':
 
                         log_stdout('TEST', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
 
-                    draw(session_id, epoch_idx, iteration, opt.dataset, 'test', pool_metrics)
+                    store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'test', pool_metrics)
                 #############
             num_samples = test_set.preds_2d[9].shape[0] + test_set.preds_2d[11].shape[0]
 
