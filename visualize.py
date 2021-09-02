@@ -52,21 +52,37 @@ def store_qualitative(session_id, epoch_idx, iteration, dataset, data_type, pool
     fig.write_html(fig_path + '.html')
 
 
-def store_quantitative(session_id, epoch_idx, dataset, data_type, global_metrics):
+# TODO: Simplify these.
+
+def store_overall_metrics(session_id, epoch_idx, dataset, data_type, global_metrics):
     dir_path = os.path.join('vis', f'{session_id}')
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
 
     fig_path = os.path.join(dir_path, f'overall_{epoch_idx}_{dataset}_{data_type}.png')
 
-    sns.set_theme(style="darkgrid")
-
-    metrics_dict = global_metrics.get_quantitative_metrics_dict()
-    metrics = [x[1] for x in metrics_dict.items()]
-    names = [x[0] for x in metrics_dict.items()]
-
+    metrics_dict = global_metrics.get_overall_metrics_dict()
     pd_metrics = pd.DataFrame(metrics_dict)
 
+    sns.set_theme(style="darkgrid")
     plot = sns.barplot(data=pd_metrics)
 
     plot.get_figure().savefig(fig_path)
+
+
+def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_metrics):
+    dir_path = os.path.join('vis', f'{session_id}')
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    fig_path = os.path.join(dir_path, f'pose_prior_{epoch_idx}_{dataset}_{data_type}.png')
+
+    metrics_dict = global_metrics.get_pose_prior_metrics_dict()
+    pd_metrics = pd.DataFrame(metrics_dict)
+
+    sns.set_theme(style="darkgrid")
+    plot = sns.barplot(data=pd_metrics)
+
+    plot.get_figure().savefig(fig_path)
+
+

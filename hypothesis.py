@@ -152,17 +152,3 @@ class HypothesisPool():
         hyps_dict['gt'] = self.gt.pose.detach().numpy()
 
         return hyps_dict
-
-    def get_quantitative_hyps_dict(self):
-        hyps_dict = OrderedDict()
-        hyps_dict['best'] = self.best.loss.detach().numpy()
-        hyps_dict['wavg'] = self.wavg.loss.detach().numpy()
-        hyps_dict['avg'] = self.avg.loss.detach().numpy()
-        hyps_dict['top'] = self.top.loss.detach().numpy()
-        hyps_dict['random'] = self.random.loss.detach().numpy()
-        hyps_dict['bottom'] = self.bottom.loss.detach().numpy()
-        hyps_dict['worst'] = self.worst.loss.detach().numpy()
-        hyps_dict['triang'] = self.triang.loss.detach().numpy()
-        hyps_dict['ransac'] = 27.4       # from Iskakov et al. '19
-
-        return hyps_dict

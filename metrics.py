@@ -2,6 +2,8 @@ from collections import OrderedDict
 import torch
 import numpy as np
 
+from mvn.utils.vis import CONNECTIVITY_DICT, SEGMENT_IDXS
+
 
 def mpjpe(est, gt):
     return torch.mean(torch.norm(est - gt, p=2, dim=1))
@@ -23,13 +25,15 @@ def rel_mpjpe(est, gt):
 
 class RatioVariances():
 
-    def __init__(self, ratioss):
-        self.upper_arm = ratioss[:, 9, 12].var()
-        self.lower_arm = ratioss[:, 10, 13].var()
-        self.shoulder  = ratioss[:, 8, 11].var()
-        self.hip       = ratioss[:, 0, 3].var()
-        self.upper_leg = ratioss[:, 1, 4].var()
-        self.lower_leg = ratioss[:, 2, 5].var()
+    def __init__(self, ratioss, dataset):
+        segment_idxs = SEGMENT_IDXS[dataset]
+
+        self.upper_arm = ratioss[:, segment_idxs[3], segment_idxs[6]].var()
+        self.lower_arm = ratioss[:, segment_idxs[4], segment_idxs[7]].var()
+        self.shoulder  = ratioss[:, segment_idxs[2], segment_idxs[5]].var()
+        self.hip       = ratioss[:, segment_idxs[9], segment_idxs[12]].var()
+        self.upper_leg = ratioss[:, segment_idxs[10], segment_idxs[13]].var()
+        self.lower_leg = ratioss[:, segment_idxs[11], segment_idxs[14]].var()
 
         self.right_left = \
             (self.upper_arm + \
@@ -43,12 +47,14 @@ class RatioVariances():
 
 class PoseMetrics():
 
-    def __init__(self):
-        self._all_segments = [[0, 1], [1, 2], [2, 3], [0, 4], [4, 5],
-        [5, 6], [0, 7], [7, 8], [8, 14], [14, 15], [15, 16],
-        [8, 11], [11, 12], [12, 13], [8, 9], [9, 10]]
+    def __init__(self, dataset):
+        #self._all_segments = [[0, 1], [1, 2], [2, 3], [0, 4], [4, 5],
+        #[5, 6], [0, 7], [7, 8], [8, 14], [14, 15], [15, 16],
+        #[8, 11], [11, 12], [12, 13], [8, 9], [9, 10]]
 
-        self.nseg = len(self._all_segments)
+        self.dataset = dataset
+        self.segments = CONNECTIVITY_DICT[self.dataset]
+        self.nseg = len(self.segments)
 
         self.ratioss = None
         self._errors = None
@@ -59,7 +65,7 @@ class PoseMetrics():
 
         pose_3d = pose_3d.detach().numpy()
         lengths = np.empty(self.nseg, dtype=np.float32)
-        for i, seg_idxs in enumerate(self._all_segments):
+        for i, seg_idxs in enumerate(self.segments):
             lengths[i] = np.linalg.norm(pose_3d[seg_idxs[0]] - pose_3d[seg_idxs[1]], ord=2)
         ratios = np.empty([1, self.nseg, self.nseg], dtype=np.float32)
         for i in range(self.nseg):
@@ -70,7 +76,7 @@ class PoseMetrics():
 
     @property
     def ratio_variances(self):
-        return RatioVariances(self.ratioss)
+        return RatioVariances(self.ratioss, self.dataset)
 
     @property
     def recent_error(self):
@@ -92,15 +98,15 @@ class PoseMetrics():
 
 class GlobalMetrics():
 
-    def __init__(self):
-        self.best = PoseMetrics()
-        self.worst = PoseMetrics()
-        self.top = PoseMetrics()
-        self.bottom = PoseMetrics()
-        self.random = PoseMetrics()
-        self.avg = PoseMetrics()
-        self.wavg = PoseMetrics()
-        self.triang = PoseMetrics()
+    def __init__(self, dataset):
+        self.best = PoseMetrics(dataset)
+        self.worst = PoseMetrics(dataset)
+        self.top = PoseMetrics(dataset)
+        self.bottom = PoseMetrics(dataset)
+        self.random = PoseMetrics(dataset)
+        self.avg = PoseMetrics(dataset)
+        self.wavg = PoseMetrics(dataset)
+        self.triang = PoseMetrics(dataset)
 
     @property
     def diff_to_triang(self):
@@ -118,9 +124,10 @@ class GlobalMetrics():
         for attribute in list(self.__dict__):
             self.__dict__[attribute].flush()
 
-    def get_quantitative_metrics_dict(self):
-        # TODO: Simplify this.
+    # TODO: Simplify these.
+    def get_overall_metrics_dict(self):
         metrics_dict = OrderedDict()
+
         metrics_dict['best'] = [self.best.error]
         metrics_dict['wavg'] = [self.wavg.error]
         metrics_dict['avg'] = [self.avg.error]
@@ -130,5 +137,19 @@ class GlobalMetrics():
         metrics_dict['worst'] = [self.worst.error]
         metrics_dict['triang'] = [self.triang.error]
         metrics_dict['ransac'] = [27.4]
+
+        return metrics_dict
+
+    def get_pose_prior_metrics_dict(self):
+        metrics_dict = OrderedDict()
+
+        metrics_dict['best'] = [self.best.ratio_variances.right_left]
+        metrics_dict['wavg'] = [self.wavg.ratio_variances.right_left]
+        metrics_dict['avg'] = [self.avg.ratio_variances.right_left]
+        metrics_dict['top'] = [self.top.ratio_variances.right_left]
+        metrics_dict['random'] = [self.random.ratio_variances.right_left]
+        metrics_dict['bottom'] = [self.bottom.ratio_variances.right_left]
+        metrics_dict['worst'] = [self.worst.ratio_variances.right_left]
+        metrics_dict['triang'] = [self.triang.ratio_variances.right_left]
 
         return metrics_dict

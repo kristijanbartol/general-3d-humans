@@ -14,7 +14,7 @@ from mvn.utils.vis import CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
-from visualize import store_qualitative, store_quantitative
+from visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative
 
 
 if __name__ == '__main__':
@@ -90,7 +90,7 @@ if __name__ == '__main__':
                             num_workers=0, batch_size=None)
 
     # Initialize global metrics.
-    global_metrics = GlobalMetrics()
+    global_metrics = GlobalMetrics(opt.dataset)
     min_mean_mpjpe = 100.
 
     for epoch_idx in range(opt.num_epochs):
@@ -217,9 +217,10 @@ if __name__ == '__main__':
                         
                     log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
 
-                    store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+                store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
 
-                    store_quantitative(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+            store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+            store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
