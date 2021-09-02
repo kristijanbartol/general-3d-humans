@@ -1,4 +1,5 @@
 import torch
+from collections import OrderedDict
 
 
 class Hypothesis():
@@ -134,5 +135,34 @@ class HypothesisPool():
         pose /= self.sorted_scores.sum()
         return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
+    @property
+    def gt(self):
+        return Hypothesis(self.gt_3d, self.gt_3d, self.loss_fun)
+
     def set_triang(self, pose) -> None:
         self.triang = Hypothesis(pose, self.gt_3d, self.loss_fun)
+
+    def get_qualitative_hyps(self):
+        hyps = OrderedDict()
+        hyps['wavg'] = self.wavg.pose.detach().numpy()
+        hyps['top'] = self.top.pose.detach().numpy()
+        hyps['bottom'] = self.bottom.pose.detach().numpy()
+        hyps['random'] = self.random.pose.detach().numpy()
+        hyps['triang'] = self.triang.pose.detach().numpy()
+        hyps['gt'] = self.gt.pose.detach().numpy()
+
+        return hyps
+
+    def get_quantitative_hyps(self):
+        hyps = OrderedDict()
+        hyps['best'] = self.best.loss.detach().numpy()
+        hyps['wavg'] = self.wavg.loss.detach().numpy()
+        hyps['avg'] = self.avg.loss.detach().numpy()
+        hyps['top'] = self.top.loss.detach().numpy()
+        hyps['random'] = self.random.loss.detach().numpy()
+        hyps['bottom'] = self.bottom.loss.detach().numpy()
+        hyps['worst'] = self.worst.loss.detach().numpy()
+        hyps['triang'] = self.triang.loss.detach().numpy()
+        hyps['ransac'] = 27.4       # from Iskakov et al. '19
+
+        return hyps

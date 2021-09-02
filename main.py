@@ -14,7 +14,7 @@ from mvn.utils.vis import CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
-from visualize import draw, __draw_pose
+from visualize import draw
 
 
 if __name__ == '__main__':
@@ -217,7 +217,7 @@ if __name__ == '__main__':
                         
                     log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
 
-                draw(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+                    draw(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations
