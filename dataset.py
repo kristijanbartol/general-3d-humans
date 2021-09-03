@@ -71,9 +71,10 @@ class Human36MDataset(Dataset):
 
         # NOTE: Set CamDSAC flag in case CamDSAC is tested (different loading).
         self.cam_dsac = False
-        if self.num_iterations is None:
-            self.num_iterations = 20
-            self.cam_dsac = True
+        #self.cam_dsac = False
+        #if self.num_iterations is None:
+        #    self.num_iterations = 20
+        #    self.cam_dsac = True
 
         self.num_poses = 0
 
@@ -155,11 +156,12 @@ class Human36MDataset(Dataset):
         return Ks, Rs, ts
 
     def __len__(self):
-        if self.data_type == TEST:
-            # 40
-            return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
-        else:
-            return self.num_iterations
+        #if self.data_type == TEST:
+        #    # 40
+        #    return (self.preds_2d[9].shape[0] + self.preds_2d[11].shape[0]) // self.num_frames + 1
+        #else:
+        #    return self.num_iterations
+        return self.num_iterations
 
     def __getitem__(self, idx):
         '''
@@ -217,10 +219,37 @@ CMU_TO_H36M_MAP = (
     (8, 7, 6, 12, 13, 14, 2, 0, 1, 5,  4,  3,  9, 10, 11)      # CMUPanoptic
 )
 
+# Transfer learning mode - 0
+CAM_SET_CONFIG = {
+    '0': [1, 2, 3, 4, 6, 7, 10],
+    '1': [12, 16, 18, 19, 22, 23, 30]
+}
+
+# Transfer learning mode - 1
+CAM_SET_NUMBER = {
+#    '0': [1, 2, 3, 4, 6, 7],
+    '1': [10, 12, 16, 18],
+    '2': [10, 12, 16, 18, 19, 22, 23, 30]
+}
+
+# Transfer learning mode - 2
+#CAM_SET_DATASET = {
+#    '0': [1, 2, 3, 4, 6, 7, 10, 12]
+#}
+
+TRANSFER_CAM_SETS = [
+    [1, 2, 3, 4, 6, 7, 10],                     # 7 CMU cameras
+    [12, 16, 18, 19, 22, 23, 30],               # other 7 CMU cameras
+    [10, 12, 16, 18],                           # 4 CMU cameras
+    [6, 7, 10, 12, 16, 18, 19, 22, 23, 30],     # 10 CMU cameras
+
+    [0, 1, 2, 3]                                # H36M cameras
+]
+
 
 class CmuPanopticDataset(Dataset):
 
-    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50):
+    def __init__(self, rootdir, data_type, cam_idxs, num_joints=19, num_frames=30, num_iterations=50):
         self.rootdir = rootdir
         self.data_type = data_type
         self.cam_idxs = cam_idxs
@@ -337,46 +366,28 @@ class CmuPanopticDataset(Dataset):
 
 
 def init_datasets(opt):
+    data_rootdir = f'./results/{opt.dataset}'
+    dataset = Human36MDataset if opt.dataset == 'human36m' else CmuPanopticDataset
 
-    def generate_test_cam_idxs(num_cameras):
-        test_cam_idxs = np.arange(31)
-        test_cam_idxs = np.delete(test_cam_idxs, opt.cam_idxs)
-        return test_cam_idxs[np.random.choice(
-            test_cam_idxs.shape[0], num_cameras, replace=False)]
+    cam_test_set = []
+    test_sets = []
 
+    if opt.transfer == -1:
+        cam_test_set.append(opt.cam_idxs)
+    else:
+        for set_idx in range(5):
+            # NOTE: Testing also on base set.
+            cam_test_set.append(TRANSFER_CAM_SETS[set_idx])
 
-    if opt.transfer_mode[0] < 2:
-        if opt.transfer_mode[0] == -1:      # no transfer
-            dataset = Human36MDataset if opt.dataset == 'human36m' else CmuPanopticDataset
-            data_rootdir = f'./results/{opt.dataset}'
-            test_cam_idxs = opt.cam_idxs
-            test_valid_iterations = None
+    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
+    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
 
-        elif opt.transfer_mode[0] == 0:     # transfer camera configuration
-            dataset = CmuPanopticDataset
-            data_rootdir = './results/cmu'
-            test_cam_idxs = generate_test_cam_idxs(len(opt.cam_idxs))
-            test_valid_iterations = opt.valid_iterations
+    for set_idx, _ in enumerate(cam_test_set):
+        # TODO: Improve this if.
+        if cam_test_set[set_idx] == [0, 1, 2, 3] or len(cam_test_set) < 4:  # second condition is for CamDSAC
+            test_set = Human36MDataset('./results/human36m', TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
+        else:
+            test_set = dataset(data_rootdir, TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
+        test_sets.append(test_set)
 
-        elif opt.transfer_mode[0] == 1:
-            dataset = CmuPanopticDataset
-            data_rootdir = './results/cmu'
-            test_num_cameras = opt.transfer_mode[1]
-            test_cam_idxs = generate_test_cam_idxs(test_num_cameras)
-            test_valid_iterations = opt.valid_iterations
-
-        train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
-        valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
-        test_set = dataset(data_rootdir, TEST, test_cam_idxs, opt.num_joints, opt.num_frames, test_valid_iterations)
-
-    if opt.transfer_mode[0] == 2:
-        if opt.transfer_mode[1] == 0:   # cmu -> h36m
-            train_set = CmuPanopticDataset('./results/cmu', TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
-            valid_set = CmuPanopticDataset('./results/cmu', VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
-            test_set = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], opt.num_joints, opt.num_frames, None)
-        elif opt.transfer_mode[1] == 1: # h36m -> cmu
-            train_set = Human36MDataset('./results/human36m', TRAIN, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.train_iterations)
-            valid_set = Human36MDataset('./results/human36m', VALID, [0, 1, 2, 3], opt.num_joints, opt.num_frames, opt.valid_iterations)
-            test_set = CmuPanopticDataset('./results/cmu', TEST, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
-
-    return train_set, valid_set, test_set
+    return train_set, valid_set, test_sets

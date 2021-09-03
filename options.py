@@ -2,6 +2,8 @@ import argparse
 import json
 from datetime import datetime
 
+from dataset import TRANSFER_CAM_SETS
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -43,6 +45,10 @@ def parse_args():
 
     parser.add_argument('--valid_iterations', type=int, default=50,
         help='number of training iterations per epoch (= dataset length)')
+
+    # TODO: Remove this for final experiments.
+    parser.add_argument('--test_iterations', type=int, default=40,
+        help='number of test iterations per epoch (= dataset length) [NOTE: should be ALL]')
 
     parser.add_argument('--num_epochs', '-e', type=int, default=100,
         help='number of epochs (= num of validations)')
@@ -94,9 +100,8 @@ def parse_args():
     parser.add_argument('--body_lengths_mode', type=int, default=0,
         help='0 - use keypoints only, 1 - along with body lengths, 2 - body lengths only')
 
-    parser.add_argument('--transfer_mode', type=int, nargs='+', default=[-1],
-        help='use transfer learning and in which mode (-1 no transfer, 0 - camera config'
-             '1 - # cameras, additionally specify #, 2 - additionally set 0 for cmu->h36m and 1 for reverse')
+    parser.add_argument('--transfer', type=int, default=-1,
+        help='use transfer learning and in which mode (-1 no transfer, otherswise pick base camera set')
 
     parser.add_argument('--pose_batch_size', type=int, default=16,
         help='number of frames after which the gradients are applied')
@@ -138,9 +143,16 @@ def parse_args():
     session_id = datetime.now().strftime('%d-%b-%Y_%H:%M:%S')
     hyperparams_string = json.dumps(vars(opt), indent=4)
 
-    if opt.transfer_mode[0] == -1 or (opt.transfer_mode[0] == 2 and opt.transfer_mode[1] == 1):
-        opt.dataset = 'human36m'
+    # NOTE: Number of joints is fixed to 17 (to be able to transfer CMU -> H36M).
+    if opt.transfer >= 0:
+        opt.cam_idxs = TRANSFER_CAM_SETS[opt.transfer]
+        if opt.transfer == 4:
+            opt.dataset = 'human36m'
+        else:   # 0, 1, 2 or 3
+            opt.dataset = 'cmu'
     else:
-        opt.dataset = 'cmu'
+        opt.dataset = 'human36m'
+        if opt.posedsac_only:
+            opt.cam_idxs = TRANSFER_CAM_SETS[4]     # [0, 1, 2, 3]
 
     return opt, session_id, hyperparams_string

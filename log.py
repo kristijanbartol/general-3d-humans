@@ -4,7 +4,7 @@ def log_stdout(dataset, epoch_idx, iteration, fidx, num_frames, global_metrics, 
         f'\tBest (per) Score: \t({pool_metrics.top.loss.item():.4f}, {pool_metrics.top.score.item():.4f})\n'
         f'\t4-triang Loss: \t\t({pool_metrics.triang.loss.item():.4f})\n'
         f'\tWeighted Error: \t({pool_metrics.wavg.loss.item():.4f}, {pool_metrics.avg.loss.item():.4f}, {pool_metrics.random.loss.item():.4f})\n'
-        f'\tPose Prior: \t\t ({global_metrics.triang.ratio_variances.right_left:.4f}, {global_metrics.wavg.ratio_variances.right_left:.4f}, {global_metrics.top.ratio_variances.right_left:.4f}, {global_metrics.avg.ratio_variances.right_left:.4f}, {global_metrics.bottom.ratio_variances.right_left:.4f})',
+        f'\tPose Prior: \t\t ({global_metrics.triang.ratio_variances.left_right:.4f}, {global_metrics.wavg.ratio_variances.left_right:.4f}, {global_metrics.top.ratio_variances.left_right:.4f}, {global_metrics.avg.ratio_variances.left_right:.4f}, {global_metrics.bottom.ratio_variances.left_right:.4f})',
         flush=True
     )
 

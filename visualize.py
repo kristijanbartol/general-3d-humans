@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import seaborn as sns
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 
@@ -64,10 +65,14 @@ def store_overall_metrics(session_id, epoch_idx, dataset, data_type, global_metr
     metrics_dict = global_metrics.get_overall_metrics_dict()
     pd_metrics = pd.DataFrame(metrics_dict)
 
+    plt.figure()
     sns.set_theme(style="darkgrid")
-    plot = sns.barplot(data=pd_metrics)
+    fig = sns.barplot(data=pd_metrics)
 
-    plot.get_figure().savefig(fig_path)
+    fig.get_figure().savefig(fig_path)
+
+    # TODO: Fix problem with non-closed figures.
+    plt.close(fig.get_figure())
 
 
 def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_metrics):
@@ -80,9 +85,32 @@ def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_m
     metrics_dict = global_metrics.get_pose_prior_metrics_dict()
     pd_metrics = pd.DataFrame(metrics_dict)
 
+    plt.figure()
     sns.set_theme(style="darkgrid")
-    plot = sns.barplot(data=pd_metrics)
+    fig = sns.barplot(data=pd_metrics)
+    fig.set_yscale("log")
 
-    plot.get_figure().savefig(fig_path)
+    fig.get_figure().savefig(fig_path)
+
+    # TODO: Fix problem with non-closed figures.
+    plt.close(fig.get_figure())
 
 
+def store_transfer_learning_metrics(session_id, epoch_idx, errors):
+    dir_path = os.path.join('vis', f'{session_id}')
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    fig_path = os.path.join(dir_path, f'transfer_{epoch_idx}.png')
+
+    errors = np.array(errors)
+    x = np.arange(errors.shape[0])
+
+    plt.figure()
+    sns.set_theme(style="darkgrid")
+    fig = sns.barplot(x, errors)
+
+    fig.get_figure().savefig(fig_path)
+
+    # TODO: Fix problem with non-closed figures.
+    plt.close(fig.get_figure())

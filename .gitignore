@@ -8,3 +8,5 @@ vis/
 **/__pycache__/
 
 git_token
+
+*.png

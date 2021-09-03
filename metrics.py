@@ -35,7 +35,7 @@ class RatioVariances():
         self.upper_leg = ratioss[:, segment_idxs[10], segment_idxs[13]].var()
         self.lower_leg = ratioss[:, segment_idxs[11], segment_idxs[14]].var()
 
-        self.right_left = \
+        self.left_right = \
             (self.upper_arm + \
             self.lower_arm + \
             self.shoulder + \
@@ -66,7 +66,10 @@ class PoseMetrics():
         pose_3d = pose_3d.detach().numpy()
         lengths = np.empty(self.nseg, dtype=np.float32)
         for i, seg_idxs in enumerate(self.segments):
-            lengths[i] = np.linalg.norm(pose_3d[seg_idxs[0]] - pose_3d[seg_idxs[1]], ord=2)
+            if self.dataset == 'cmu':
+                lengths[i] = 0.
+            else:
+                lengths[i] = np.linalg.norm(pose_3d[seg_idxs[0]] - pose_3d[seg_idxs[1]], ord=2)
         ratios = np.empty([1, self.nseg, self.nseg], dtype=np.float32)
         for i in range(self.nseg):
             for j in range(self.nseg):
@@ -143,13 +146,13 @@ class GlobalMetrics():
     def get_pose_prior_metrics_dict(self):
         metrics_dict = OrderedDict()
 
-        metrics_dict['best'] = [self.best.ratio_variances.right_left]
-        metrics_dict['wavg'] = [self.wavg.ratio_variances.right_left]
-        metrics_dict['avg'] = [self.avg.ratio_variances.right_left]
-        metrics_dict['top'] = [self.top.ratio_variances.right_left]
-        metrics_dict['random'] = [self.random.ratio_variances.right_left]
-        metrics_dict['bottom'] = [self.bottom.ratio_variances.right_left]
-        metrics_dict['worst'] = [self.worst.ratio_variances.right_left]
-        metrics_dict['triang'] = [self.triang.ratio_variances.right_left]
+        metrics_dict['best'] = [self.best.ratio_variances.left_right]
+        metrics_dict['wavg'] = [self.wavg.ratio_variances.left_right]
+        metrics_dict['avg'] = [self.avg.ratio_variances.left_right]
+        metrics_dict['top'] = [self.top.ratio_variances.left_right]
+        metrics_dict['random'] = [self.random.ratio_variances.left_right]
+        metrics_dict['bottom'] = [self.bottom.ratio_variances.left_right]
+        metrics_dict['worst'] = [self.worst.ratio_variances.left_right]
+        metrics_dict['triang'] = [self.triang.ratio_variances.left_right]
 
         return metrics_dict
