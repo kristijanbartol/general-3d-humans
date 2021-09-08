@@ -106,6 +106,7 @@ class GlobalMetrics():
         self.worst = PoseMetrics(dataset)
         self.top = PoseMetrics(dataset)
         self.bottom = PoseMetrics(dataset)
+        self.stoch = PoseMetrics(dataset)
         self.random = PoseMetrics(dataset)
         self.avg = PoseMetrics(dataset)
         self.wavg = PoseMetrics(dataset)
@@ -132,13 +133,14 @@ class GlobalMetrics():
         metrics_dict = OrderedDict()
 
         metrics_dict['best'] = [self.best.error]
-        metrics_dict['wavg'] = [self.wavg.error]
+        metrics_dict['weight'] = [self.wavg.error]
         metrics_dict['avg'] = [self.avg.error]
         metrics_dict['top'] = [self.top.error]
+        metrics_dict['stoch'] = [self.stoch.error]
         metrics_dict['random'] = [self.random.error]
         metrics_dict['bottom'] = [self.bottom.error]
         metrics_dict['worst'] = [self.worst.error]
-        metrics_dict['triang'] = [self.triang.error]
+        metrics_dict['naive'] = [self.triang.error]
         metrics_dict['ransac'] = [27.4]
 
         return metrics_dict
@@ -147,12 +149,13 @@ class GlobalMetrics():
         metrics_dict = OrderedDict()
 
         metrics_dict['best'] = [self.best.ratio_variances.left_right]
-        metrics_dict['wavg'] = [self.wavg.ratio_variances.left_right]
+        metrics_dict['weight'] = [self.wavg.ratio_variances.left_right]
         metrics_dict['avg'] = [self.avg.ratio_variances.left_right]
         metrics_dict['top'] = [self.top.ratio_variances.left_right]
+        metrics_dict['stoch'] = [self.stoch.ratio_variances.left_right]
         metrics_dict['random'] = [self.random.ratio_variances.left_right]
         metrics_dict['bottom'] = [self.bottom.ratio_variances.left_right]
         metrics_dict['worst'] = [self.worst.ratio_variances.left_right]
-        metrics_dict['triang'] = [self.triang.ratio_variances.left_right]
+        #metrics_dict['triang'] = [self.triang.ratio_variances.left_right]
 
         return metrics_dict

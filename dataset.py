@@ -375,19 +375,20 @@ def init_datasets(opt):
     if opt.transfer == -1:
         cam_test_set.append(opt.cam_idxs)
     else:
-        for set_idx in range(5):
+        #for set_idx in range(5):
             # NOTE: Testing also on base set.
-            cam_test_set.append(TRANSFER_CAM_SETS[set_idx])
+        #    cam_test_set.append(TRANSFER_CAM_SETS[set_idx])
+        cam_test_set.append(TRANSFER_CAM_SETS[opt.transfer])
 
     train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
     valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
 
     for set_idx, _ in enumerate(cam_test_set):
         # TODO: Improve this if.
-        if cam_test_set[set_idx] == [0, 1, 2, 3] or len(cam_test_set) < 4:  # second condition is for CamDSAC
+        if cam_test_set[set_idx] == [0, 1, 2, 3]: #or len(cam_test_set) < 4:  # second condition is for CamDSAC
             test_set = Human36MDataset('./results/human36m', TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
         else:
-            test_set = dataset(data_rootdir, TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
+            test_set = CmuPanopticDataset('./results/cmu', TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
         test_sets.append(test_set)
 
     return train_set, valid_set, test_sets

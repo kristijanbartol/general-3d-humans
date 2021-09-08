@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from collections import OrderedDict
 
 
@@ -116,6 +117,12 @@ class HypothesisPool():
         return self.__create_hyp(self._bottom_idx)
 
     @property
+    def stoch(self) -> Hypothesis:
+        # Random hypothesis, based on estimated distribution.
+        stoch_selection = self.scores.multinomial(1)
+        return self.__create_hyp(stoch_selection)
+
+    @property
     def random(self) -> Hypothesis:
         return self.__create_hyp(torch.randint(self.nhyps, (1,))[0])
 
@@ -144,11 +151,11 @@ class HypothesisPool():
 
     def get_qualitative_hyps_dict(self):
         hyps_dict = OrderedDict()
-        hyps_dict['wavg'] = self.wavg.pose.detach().numpy()
+        hyps_dict['weight'] = self.wavg.pose.detach().numpy()
         hyps_dict['top'] = self.top.pose.detach().numpy()
         hyps_dict['bottom'] = self.bottom.pose.detach().numpy()
         hyps_dict['random'] = self.random.pose.detach().numpy()
-        hyps_dict['triang'] = self.triang.pose.detach().numpy()
+        hyps_dict['naive'] = self.triang.pose.detach().numpy()
         hyps_dict['gt'] = self.gt.pose.detach().numpy()
 
         return hyps_dict

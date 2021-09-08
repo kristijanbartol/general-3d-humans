@@ -317,7 +317,7 @@ class PoseDSAC(DSAC):
         #selected_combination_idxs = np.random.choice(
         #    np.arange(len(all_view_combinations)), size=num_joints,
         #    p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
-            #p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
+        #    p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
 
         # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
@@ -416,6 +416,7 @@ class PoseDSAC(DSAC):
         metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
         metrics.top.update(hpool.top.loss, hpool.top.pose)
         metrics.bottom.update(hpool.bottom.loss, hpool.bottom.pose)
+        metrics.stoch.update(hpool.random.loss, hpool.random.pose)
         metrics.random.update(hpool.random.loss, hpool.random.pose)
         metrics.avg.update(hpool.avg.loss, hpool.avg.pose)
         metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)

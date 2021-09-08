@@ -148,6 +148,7 @@ def parse_args():
         opt.cam_idxs = TRANSFER_CAM_SETS[opt.transfer]
         if opt.transfer == 4:
             opt.dataset = 'human36m'
+            opt.cam_idxs = TRANSFER_CAM_SETS[4]
         else:   # 0, 1, 2 or 3
             opt.dataset = 'cmu'
     else:

@@ -453,7 +453,8 @@ if __name__ == '__main__':
                 logger.write(f'{log_line}\n')
                 global_metrics.flush()
 
-            store_transfer_learning_metrics(session_id, epoch_idx, mpjpe_scores_transfer)
+            if opt.transfer != -1:
+                store_transfer_learning_metrics(session_id, epoch_idx, mpjpe_scores_transfer)
 
             ################################################
 
