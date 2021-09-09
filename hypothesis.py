@@ -99,27 +99,27 @@ class HypothesisPool():
         return self.__create_hyp(self._worst_idx)
 
     @property
-    def _top_idx(self):
+    def _most_idx(self):
         return self.sorted_score_idxs[0].item()
 
     @property
-    def top(self) -> Hypothesis:
+    def most(self) -> Hypothesis:
         # Best per score.
-        return self.__create_hyp(self._top_idx)
+        return self.__create_hyp(self._most_idx)
 
     @property
-    def _bottom_idx(self):
+    def _least_idx(self):
         return self.sorted_score_idxs[-1].item()
 
     @property
-    def bottom(self) -> Hypothesis:
+    def least(self) -> Hypothesis:
         # Worst per score.
-        return self.__create_hyp(self._bottom_idx)
+        return self.__create_hyp(self._least_idx)
 
     @property
     def stoch(self) -> Hypothesis:
         # Random hypothesis, based on estimated distribution.
-        stoch_selection = self.scores.multinomial(1)
+        stoch_selection = torch.multinomial(self.scores[:, 0], num_samples=1)[0]
         return self.__create_hyp(stoch_selection)
 
     @property
@@ -152,9 +152,9 @@ class HypothesisPool():
     def get_qualitative_hyps_dict(self):
         hyps_dict = OrderedDict()
         hyps_dict['weight'] = self.wavg.pose.detach().numpy()
-        hyps_dict['top'] = self.top.pose.detach().numpy()
-        hyps_dict['bottom'] = self.bottom.pose.detach().numpy()
-        hyps_dict['random'] = self.random.pose.detach().numpy()
+        hyps_dict['most'] = self.most.pose.detach().numpy()
+        hyps_dict['least'] = self.least.pose.detach().numpy()
+        hyps_dict['stoch'] = self.stoch.pose.detach().numpy()
         hyps_dict['naive'] = self.triang.pose.detach().numpy()
         hyps_dict['gt'] = self.gt.pose.detach().numpy()
 

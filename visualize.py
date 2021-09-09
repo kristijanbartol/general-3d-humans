@@ -162,7 +162,7 @@ def store_overall_metrics(session_id, epoch_idx, dataset, data_type, global_metr
     values = np.array([x[1] for x in metrics_dict.items()])
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
-    np.save(os.path.join(logs_dir, 'overall.npy'), values)
+    np.save(os.path.join(logs_dir, f'overall_{epoch_idx}_{dataset}_{data_type}.npy'), values)
 
 
 def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_metrics):
@@ -172,9 +172,27 @@ def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_m
 
     fig_path = os.path.join(dir_path, f'pose_prior_{epoch_idx}_{dataset}_{data_type}.png')
 
-    metrics_dict = global_metrics.get_pose_prior_metrics_dict()
-    pd_metrics = pd.DataFrame(metrics_dict)
+    metrics = np.array(global_metrics.get_pose_prior_metrics_dict())
 
+    x = ['weight', 'avg', 'most', 'least', 'stoch', 'random', 'best', 'worst']
+
+    plt.bar(x + 0.00, metrics[0], width = 0.15)
+    plt.bar(x + 0.15, metrics[1], width = 0.15)
+    plt.bar(x + 0.30, metrics[2], width = 0.15)
+    plt.bar(x + 0.45, metrics[3], width = 0.15)
+    plt.bar(x + 0.60, metrics[4], width = 0.15)
+    plt.bar(x + 0.75, metrics[5], width = 0.15)
+
+    plt.yscale('log')
+
+    plt.style.use('seaborn')
+
+    plt.savefig(fig_path)
+    plt.close()
+
+    #pd_metrics = pd.DataFrame(metrics_dict)
+
+    '''
     plt.figure()
     sns.set_theme(style="darkgrid")
     fig = sns.barplot(data=pd_metrics)
@@ -184,13 +202,16 @@ def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_m
 
     # TODO: Fix problem with non-closed figures.
     plt.close(fig.get_figure())
+    '''
 
+    '''
     # TODO: Remove this from here.
     logs_dir = f'./logs/{session_id}'
     values = np.array([x[1] for x in metrics_dict.items()])
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
     np.save(os.path.join(logs_dir, 'pose_prior.npy'), values)
+    '''
 
 
 def store_transfer_learning_metrics(session_id, epoch_idx, errors):

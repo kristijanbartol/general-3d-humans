@@ -211,8 +211,8 @@ if __name__ == '__main__':
                 if opt.transfer == -1:
                     store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
 
-            store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
             store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+            store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
             ################################################
         mean_rot_error = all_rot_errors / train_set.num_iterations
         mean_trans_error = all_trans_errors / train_set.num_iterations

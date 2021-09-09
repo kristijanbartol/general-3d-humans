@@ -414,8 +414,8 @@ class PoseDSAC(DSAC):
         # TODO: Could reduce the number of lines.
         metrics.best.update(hpool.best.loss, hpool.best.pose)
         metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
-        metrics.top.update(hpool.top.loss, hpool.top.pose)
-        metrics.bottom.update(hpool.bottom.loss, hpool.bottom.pose)
+        metrics.most.update(hpool.most.loss, hpool.most.pose)
+        metrics.least.update(hpool.least.loss, hpool.least.pose)
         metrics.stoch.update(hpool.random.loss, hpool.random.pose)
         metrics.random.update(hpool.random.loss, hpool.random.pose)
         metrics.avg.update(hpool.avg.loss, hpool.avg.pose)

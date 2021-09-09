@@ -227,10 +227,12 @@ def fundamental(M):
     return our_metrics[1:], vanilla_metrics
     
 
-all_our_scores = []
-all_vanilla_scores = []
+all_our_means = []
+all_our_stds = []
+all_vanilla_means = []
+all_vanilla_stds = []
 
-num_frames_range = range(8, 100)
+num_frames_range = range(10, 100)
 
 for M in num_frames_range:
     our_repeated = []
@@ -241,33 +243,45 @@ for M in num_frames_range:
             continue
         our_repeated.append(our_metrics)
         vanilla_repeated.append(vanilla_metrics)
-    all_our_scores.append(np.array(our_repeated).mean(axis=0))
-    all_vanilla_scores.append(np.array(vanilla_repeated).mean(axis=0))
+    all_our_means.append(np.array(our_repeated).mean(axis=0))
+    all_our_stds.append(np.array(our_repeated).std(axis=0))
+    
+    all_vanilla_means.append(np.array(vanilla_repeated).mean(axis=0))
+    all_vanilla_stds.append(np.array(vanilla_repeated).std(axis=0))
 
-all_our_scores = np.array(all_our_scores)
-all_vanilla_scores = np.array(all_vanilla_scores)
+all_our_means = np.array(all_our_means)
+all_our_stds = np.array(all_our_stds)
+
+all_vanilla_means = np.array(all_vanilla_means)
+all_vanilla_stds = np.array(all_vanilla_stds)
 
 
 x = np.array(num_frames_range)
-our_y = all_our_scores[:, 3]
-vanilla_y = np.clip(all_vanilla_scores[:, 3], 0, 100.)
+our_y = all_our_means[:, 3]
+our_upper = our_y + all_our_stds[:, 3]
+our_lower = np.clip(our_y - all_our_stds[:, 3], a_min=0, a_max=None)
 
-#x_new = np.linspace(x.min(), x.max(), 100) 
-
-#our_spl = make_interp_spline(x, our_y)
-#our_y_new = our_spl(x_new)
-
-#vanilla_spl = make_interp_spline(x, vanilla_y)
-#vanilla_y_new = vanilla_spl(x_new)
+vanilla_y = all_vanilla_means[:, 3]
+vanilla_upper = np.clip(vanilla_y + all_vanilla_stds[:, 3], a_min=None, a_max=80.)
+vanilla_lower = np.clip(vanilla_y - all_vanilla_stds[:, 3], a_min=0, a_max=None)
 
 
-plt.plot(x, our_y)
-plt.plot(x, vanilla_y)
+our_plt, = plt.plot(x, our_y, color='dodgerblue', label='Our model')
+plt.fill_between(x, our_upper, our_lower, color='crimson', alpha=0.2)
+
+vanilla_plt, = plt.plot(x, vanilla_y, color='darkorange', label='Vanilla 8-point')
+plt.fill_between(x, vanilla_upper, vanilla_lower, color='lightgreen', alpha=0.2)
+
+plt.legend(handles=[our_plt, vanilla_plt])
+
+plt.xlabel('Number of frames')
+plt.ylabel('3D error')
+
 plt.style.use('seaborn')
 
-plt.savefig('./results/8-point.png')
-np.save(f'./results/our_scores_{IDXS[0]}_{IDXS[1]}.npy', all_our_scores)
-np.save(f'./results/vanilla_scores_{IDXS[0]}_{IDXS[1]}.npy', all_vanilla_scores)
+plt.savefig(f'./results/8-point_{IDXS[0]}_{IDXS[1]}_new.png')
+np.save(f'./results/our_scores_{IDXS[0]}_{IDXS[1]}.npy', all_our_means)
+np.save(f'./results/vanilla_scores_{IDXS[0]}_{IDXS[1]}.npy', all_vanilla_means)
 
 
 '''
