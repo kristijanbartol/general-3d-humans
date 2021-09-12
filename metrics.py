@@ -188,3 +188,67 @@ class GlobalMetrics():
         #metrics_dict['triang'] = [self.triang.ratio_variances.left_right]
 
         return metrics_dict
+
+
+
+class CameraMetrics():
+
+    def __init__(self):
+        self._errors = None
+        self.flush()
+    
+    def update(self, error):
+        self._errors.append(error.detach().numpy())
+
+    @property
+    def error(self):
+        return np.array(self._errors).mean()
+
+    @property
+    def errors(self):
+        return np.array(self._errors)
+
+    def flush(self):
+        self._errors = []
+
+
+
+class CameraGlobalMetrics():
+
+    def __init__(self):
+        self.best = CameraMetrics()
+        self.worst = CameraMetrics()
+        self.most = CameraMetrics()
+        self.least = CameraMetrics()
+        self.stoch = CameraMetrics()
+        self.random = CameraMetrics()
+        self.avg = CameraMetrics()
+        self.wavg = CameraMetrics()
+        self.triang = CameraMetrics()
+
+    @property
+    def diff_to_avg(self):
+        return (self.wavg.errors - self.avg.errors).mean()
+
+    @property
+    def diff_to_random(self):
+        return (self.wavg.errors - self.random.errors).mean()
+
+    def flush(self):
+        for attribute in list(self.__dict__):
+            self.__dict__[attribute].flush()
+
+    # TODO: Simplify these.
+    def get_overall_metrics_dict(self):
+        metrics_dict = OrderedDict()
+
+        metrics_dict['weight'] = [self.wavg.error]
+        metrics_dict['avg'] = [self.avg.error]
+        metrics_dict['most'] = [self.most.error]
+        metrics_dict['least'] = [self.least.error]
+        metrics_dict['stoch'] = [self.stoch.error]
+        metrics_dict['random'] = [self.random.error]
+        metrics_dict['best'] = [self.best.error]
+        metrics_dict['worst'] = [self.worst.error]
+
+        return metrics_dict

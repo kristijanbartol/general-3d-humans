@@ -10,7 +10,7 @@ from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
 from mvn.utils.vis import CONNECTIVITY_DICT
 from metrics import rel_mpjpe
-from hypothesis import HypothesisPool, Hypothesis
+from hypothesis import CameraHypothesisPool, CameraParams, HypothesisPool
 
 
 class DSAC:
@@ -27,7 +27,7 @@ class CameraDSAC(DSAC):
     '''
 
     def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, score_nn, loss_function, scale=None, device='cpu'):
+            temp, gumbel, hard, exp_beta, est_beta, score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
         hyps -- number of hypotheses (trials) for each CameraDSAC iteration
@@ -46,7 +46,9 @@ class CameraDSAC(DSAC):
         
         self.temp = temp
 
+        self.exp_beta = exp_beta
         self.entropy_beta = entropy_beta
+        self.est_beta = est_beta
         self.min_entropy = min_entropy
         self.entropy_to_scores = entropy_to_scores
 
@@ -135,7 +137,7 @@ class CameraDSAC(DSAC):
         '''
         return R_rel @ R_init, t_init + t_rel
 
-    def __call__(self, point_corresponds, Ks, Rs, ts, points_3d):
+    def __call__(self, point_corresponds, gt_Ks, gt_Rs, gt_ts, points_3d, metrics):
         '''
         Perform robust, differentiable autocalibration.
 
@@ -151,99 +153,58 @@ class CameraDSAC(DSAC):
                 J is the number of joints
                 3 is the number of coordinates (x, y, z)
         '''
-        hyp_losses = torch.ones([self.hyps, 1], device=self.device) * 100.        # loss of each hypothesis
-        hyp_scores = torch.zeros([self.hyps, 1], device=self.device)              # score of each hypothesis
-        line_dists = torch.ones([self.hyps, 1], device=self.device) * 1000.       # list of all line dists
         
-        #Rs_hyps = torch.zeros([self.hyps, 3, 3], device=self.device)
-        #ts_hyps = torch.zeros([self.hyps, 3, 1], device=self.device)
+        gt_params = CameraParams(gt_Ks[0], gt_Ks[1], gt_Rs[0], gt_ts[0], 
+            CameraParams.to_R_rel(gt_Rs[0], gt_Rs[1]),
+            CameraParams.to_t_rel(gt_ts[0], gt_ts[1], gt_Rs[0], gt_Rs[1]))
+        hpool = CameraHypothesisPool(self.hyps, gt_params, points_3d, self.loss_function, device=self.device)
 
-        max_score = 0.
-        min_line_dist = 100.
-        selected_params = None
-        invalid_hyps = 0
-
-        for h in range(0, self.hyps):
-
-            # === Step 1: Sample hypothesis ===========================
-            cam_params = self.__sample_hyp(point_corresponds, Ks, Rs, ts)
+        hyp_idx = 0
+        while hyp_idx < self.hyps:
+            cam_params = self.__sample_hyp(point_corresponds, gt_Ks, gt_Rs, gt_ts)
             if cam_params is None:
-                invalid_hyps += 1
-                continue  # skip invalid hyps
+                continue    # skip invalid hyps
+            else:
+                hyp_idx += 1
 
-            # === Step 2: Score hypothesis using soft inlier count ====
-            score, line_dist = self.__score_nn(
-                point_corresponds, cam_params[0], cam_params[1], Ks, Rs, ts)
-
-            # === Step 3: Calculate loss of hypothesis ================
-            loss = self.loss_function(cam_params[0], Ks, Rs, ts, points_3d)
-
-            # Store results.
-            hyp_losses[h] = loss
-            hyp_scores[h] = score
-            line_dists[h] = line_dist
-            #Rs_hyps[h] = cam_params[0]
-            #ts_hyps[h] = cam_params[1]
-
-            if score > max_score:
-                max_score = score
-                selected_params = cam_params
-
-            if line_dist < min_line_dist:
-                min_line_dist = line_dist
-                best_line_dist_hyp = cam_params
-
-        # === Step 4: calculate the expectation ===========================
+            score = self.__score_nn(point_corresponds, cam_params, gt_Ks, gt_Rs, gt_ts)
+            hpool.append(cam_params, score)
 
         # Softmax distribution from hypotheses scores.
         if self.gumbel:
-            #softmax_mask = torch.zeros((hyp_scores.shape[0], 1), dtype=torch.float32, device=self.device)
-            #softmax_mask[hyp_scores.nonzero(as_tuple=True)[0]] = 1.
-            hyp_scores_softmax = F.gumbel_softmax(hyp_scores, tau=self.temp, hard=self.hard, dim=0)
+            hyp_scores_softmax = F.gumbel_softmax(hpool.scores, tau=self.temp, hard=self.hard, dim=0)
         else:  
-            hyp_scores_softmax = F.softmax(hyp_scores / self.temp, dim=0)
+            hyp_scores_softmax = F.softmax(hpool.scores / self.temp, dim=0)
 
-        # Store best hypotheses (for logging).
-        best_loss_idx = torch.argmin(hyp_losses, dim=0)
-        best_softmax_score_idx = torch.argmax(hyp_scores_softmax, dim=0)
-        best_score_idx = torch.argmax(hyp_scores, dim=0)
-        best_line_dist_idx = torch.argmin(line_dists, dim=0)
-
-        best_loss = (hyp_losses[best_loss_idx], hyp_scores_softmax[best_loss_idx], 
-            hyp_scores[best_loss_idx], line_dists[best_loss_idx])
-        best_softmax_score = (hyp_losses[best_softmax_score_idx], hyp_scores_softmax[best_softmax_score_idx], 
-            hyp_scores[best_softmax_score_idx], line_dists[best_softmax_score_idx])
-        best_score = (hyp_losses[best_score_idx], hyp_scores_softmax[best_score_idx], 
-            hyp_scores[best_score_idx], line_dists[best_score_idx])
-        best_line_dist = (hyp_losses[best_line_dist_idx], hyp_scores_softmax[best_line_dist_idx], 
-            hyp_scores[best_line_dist_idx], line_dists[best_line_dist_idx])
-
-        # Loss expectation.
+        # Entropy loss.
         if self.entropy_to_scores:
-            softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores_softmax))
             #softmax_entropy = -torch.sum(hyp_scores * torch.log(hyp_scores))
+            softmax_entropy = -torch.sum(hpool.scores * torch.log(hyp_scores_softmax))
         else:
             softmax_entropy = -torch.sum(hyp_scores_softmax * torch.log(hyp_scores_softmax))
 
-        hyp_losses /= hyp_losses.max()
+        # Expectation loss.
+        hpool.losses /= hpool.losses.max()
+        exp_loss = torch.sum(hpool.losses * hyp_scores_softmax)
 
-        exp_loss = torch.sum(hyp_losses * hyp_scores_softmax)
-        entropy_loss = max(0., (softmax_entropy - self.min_entropy))
+        # Total loss = Exp Loss + Entropy Loss + Hypothesis Loss (weighted average).
+        total_loss = self.est_beta * hpool.wavg.loss + \
+            self.entropy_beta * softmax_entropy + \
+            self.exp_beta * exp_loss
 
-        total_loss = exp_loss + self.entropy_beta * softmax_entropy
+        # Update metrics.
+        # TODO: Could reduce the number of lines.
+        metrics.best.update(hpool.best.loss, hpool.best.pose)
+        metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
+        metrics.most.update(hpool.most.loss, hpool.most.pose)
+        metrics.least.update(hpool.least.loss, hpool.least.pose)
+        metrics.stoch.update(hpool.random.loss, hpool.random.pose)
+        metrics.random.update(hpool.random.loss, hpool.random.pose)
+        metrics.avg.update(hpool.avg.loss, hpool.avg.pose)
+        metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)
+        metrics.triang.update(hpool.triang.loss, hpool.triang.pose)
 
-        if not invalid_hyps == self.hyps:
-            selected_params = self.__get_absolute_params(
-                Rs[0], ts[0], selected_params[0], selected_params[1])
-            best_line_dist_hyp = self.__get_absolute_params(
-                Rs[0], ts[0], best_line_dist_hyp[0], best_line_dist_hyp[1])
-        else:
-            print('All scores are zero!')
-            return None
-
-        print(f'Invalid hyps: {invalid_hyps}')
-
-        return total_loss, exp_loss, entropy_loss, selected_params, best_loss, best_softmax_score, best_score, best_line_dist, best_line_dist_hyp
+        return total_loss, metrics, hpool
 
 
 
@@ -253,7 +214,7 @@ class PoseDSAC(DSAC):
     '''
 
     def __init__(self, hyps, num_joints, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, body_lengths_mode, weighted_selection, exp_beta, weighted_beta,
+            temp, gumbel, hard, body_lengths_mode, weighted_selection, exp_beta, est_beta,
             score_nn, loss_function, scale=None, device='cpu'):
         '''
         Constructor.
@@ -268,7 +229,7 @@ class PoseDSAC(DSAC):
         self.entropy_beta = entropy_beta
         self.min_entropy = min_entropy
         self.temp = temp
-        self.weighted_beta = weighted_beta
+        self.est_beta = est_beta
         self.exp_beta = exp_beta
         
         self.entropy_to_scores = entropy_to_scores
@@ -314,10 +275,6 @@ class PoseDSAC(DSAC):
             all_view_combinations += list(itertools.combinations(list(range(num_cameras)), l))
         selected_combination_idxs = np.random.choice(
             np.arange(len(all_view_combinations)), size=num_joints)
-        #selected_combination_idxs = np.random.choice(
-        #    np.arange(len(all_view_combinations)), size=num_joints,
-        #    p=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.075, 0.075, 0.075, 0.075, 0.4])
-        #    p=[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.54])
 
         # For each joint, use the selected view subsets to triangulate points.
         pose_3d = torch.zeros([num_joints, 3], dtype=torch.float32, device=self.device)
@@ -406,7 +363,7 @@ class PoseDSAC(DSAC):
         exp_loss = torch.sum(hpool.losses * hyp_scores_softmax)
 
         # Total loss = Exp Loss + Entropy Loss + Hypothesis Loss (weighted average).
-        total_loss = self.weighted_beta * hpool.wavg.loss + \
+        total_loss = self.est_beta * hpool.wavg.loss + \
             self.entropy_beta * softmax_entropy + \
             self.exp_beta * exp_loss
 

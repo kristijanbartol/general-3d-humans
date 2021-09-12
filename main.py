@@ -1,4 +1,4 @@
-from metrics import GlobalMetrics
+from metrics import CameraGlobalMetrics, GlobalMetrics
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -67,10 +67,10 @@ if __name__ == '__main__':
     # Create DSACs.
     camera_dsac = CameraDSAC(opt.camera_hypotheses, opt.sample_size, opt.inlier_threshold, 
         opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
-        opt.temp, opt.gumbel, opt.hard, camera_nn, camera_loss)
+        opt.temp, opt.gumbel, opt.hard, opt.exp_beta, opt.est_beta, camera_nn, camera_loss)
     pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, 
         opt.entropy_to_scores, opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, 
-        opt.weighted_selection, opt.exp_beta, opt.weighted_beta, pose_nn, pose_loss)
+        opt.weighted_selection, opt.exp_beta, opt.est_beta, pose_nn, pose_loss)
 
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,
@@ -82,6 +82,7 @@ if __name__ == '__main__':
 
     # Initialize global metrics.
     global_metrics = GlobalMetrics(opt.dataset)
+    camera_global_metrics = CameraGlobalMetrics()
     min_mean_mpjpe = 100.
 
     for epoch_idx in range(opt.num_epochs):
@@ -126,62 +127,16 @@ if __name__ == '__main__':
 
                     # NOTE: GT 3D used only as any other random points for reprojection loss, for now.
                     # NOTE: Using GT intrinsics, for now.
-                    cam_dsac_result = \
-                        camera_dsac(pair_corresponds, pair_gt_Ks, pair_gt_Rs, pair_gt_ts, gt_3d)
+                    total_loss, camera_global_metrics, pool_metrics = \
+                        camera_dsac(pair_corresponds, pair_gt_Ks, pair_gt_Rs, pair_gt_ts, gt_3d, camera_global_metrics)
                     
-                    # In case when all hypotheses are "Not all positive".
-                    if cam_dsac_result is None:
-                        not_all_positive = True
-                        break
-                    else:
-                        total_loss, exp_loss, entropy_loss, est_params, best_per_loss, best_per_softmax_score, best_per_score, best_per_line_dist, best_line_dist_params = cam_dsac_result
+                    all_total_loss += total_loss
 
-                    Rs.append(est_params[0])
-                    ts.append(est_params[1])
+                all_total_loss.backward()
+                opt_pose_nn.step()
+                opt_pose_nn.zero_grad()
 
-                    total_losses.append(total_loss)
-
-                    if best_per_score[0] < best_per_line_dist[0]:
-                        camera_score += 1
-                    elif best_per_score[0] > best_per_line_dist[0]:
-                        camera_score -= 1
-
-                    print(f'[TRAIN] Epoch: {epoch_idx}, Iteration: {iteration}, Total Loss: {total_loss.item():.4f}, Expectation loss: {exp_loss:.4f}, Entropy loss: {entropy_loss:.4f}, [LR: {opt.learning_rate}, Temp: {opt.temp:.2f}]\n'
-                        f'\tBest (per) Loss: \t(\t{best_per_loss[0].item():.4f}, \t{best_per_loss[1].item():.4f}, \t{best_per_loss[2].item():.4f}, \t{best_per_loss[3].item():.4f}) \n' 
-                        f'\tBest (per) Softmax Score: (\t{best_per_softmax_score[0].item():.4f}, \t{best_per_softmax_score[1].item():.4f}, \t{best_per_softmax_score[2].item():.4f}, \t{best_per_softmax_score[3].item():.4f}) \n'
-                        f'\tBest (per) Score: \t(\t{best_per_score[0].item():.4f}, \t{best_per_score[1].item():.4f}, \t{best_per_score[2].item():.4f}, \t{best_per_score[3].item():.4f}) \n'
-                        f'\tBest (per) Line Dist: \t(\t{best_per_line_dist[0].item():.4f}, \t{best_per_line_dist[1].item():.4f}, \t{best_per_line_dist[2].item():.4f}, \t{best_per_line_dist[3].item():.4f})', 
-                        flush=True
-                    )
-
-                if not_all_positive:
-                    continue
-
-                Rs = torch.stack(Rs, dim=0)
-                ts = torch.stack(ts, dim=0)
-
-                # NOTE: This evaluation only works for 2-camera configuration.
-                R_gt_quat = kornia.rotation_matrix_to_quaternion(Rs[0])
-                Rs_rel_quat = kornia.rotation_matrix_to_quaternion(gt_Rs[1])
-                rot_error = torch.mean(torch.abs(R_gt_quat - Rs_rel_quat))
-
-                all_rot_errors += rot_error.detach().numpy()
-                # TODO: Estimate translation.
-                all_trans_errors += 0.
-                
-                # variance reduction (using "baseline")
-                #baseline = sum(total_losses) / len(total_losses) #expected loss
-                '''
-                for i, l in enumerate(total_losses): # substract baseline for each sample to reduce gradient variance
-                    loss_gradients[i] = total_losses[i].backward() * (l - baseline) / opt.samplecount
-                '''
-
-                avg_total_loss = torch.sum(torch.stack(total_losses, dim=0))
-
-                #torch.autograd.backward(total_losses, loss_gradients.cuda())   # calculate gradients (pytorch autograd)
-                avg_total_loss.backward()
-                opt_camera_nn.step()			# update parameters
-                opt_camera_nn.zero_grad()	    # reset gradient buffer
+                all_total_loss = 0
             else:
                 Rs = gt_Rs
                 ts = gt_ts

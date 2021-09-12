@@ -174,7 +174,8 @@ def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_m
 
     metrics = np.array(global_metrics.get_pose_prior_metrics_dict())
 
-    x = ['weight', 'avg', 'most', 'least', 'stoch', 'random', 'best', 'worst']
+    #x = ['weight', 'avg', 'most', 'least', 'stoch', 'random', 'best', 'worst']
+    x = np.arange(8)
 
     plt.bar(x + 0.00, metrics[0], width = 0.15)
     plt.bar(x + 0.15, metrics[1], width = 0.15)

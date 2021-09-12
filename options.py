@@ -62,8 +62,8 @@ def parse_args():
     parser.add_argument('--exp_beta', type=float, default=1.,
         help='the coeficient next to expectation loss component')
 
-    parser.add_argument('--weighted_beta', type=float, default=0.05,
-        help='the coeficient next to weighted triangulation loss component')
+    parser.add_argument('--est_beta', type=float, default=0.05,
+        help='the coeficient next to error estimation loss component')
 
     parser.add_argument('--temp', '-t', type=float, default=1.,
         help='softmax temperature regulating how close the distribution is to categorical')

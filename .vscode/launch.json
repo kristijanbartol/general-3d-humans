@@ -21,7 +21,7 @@
                 //"--cam_idxs", "0", "5", "8", "9", "10", "11", //"10", "12", "16", "18", "19", "22", "23", "30",
 
                 //"--dataset", "human36m",
-                "--cam_idxs", "0", "1", "2", "3",       // now used only for CamDSAC
+                "--cam_idxs", "1", "2",       // now used only for CamDSAC
 
                 "--layers_camdsac", "700", "500", "300", "300",
 
@@ -42,7 +42,7 @@
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
                 //"--layers_posedsac", "200", "300", "200",
                 "--entropy_beta_pose", "0.01",
-                "--weighted_beta", "0.02",
+                "--est_beta", "0.02",
                 "--exp_beta", "1.",
                 "--body_lengths_mode", "1",
                 "--pose_batch_size", "16",
