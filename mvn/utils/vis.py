@@ -15,6 +15,27 @@ import PIL
 
 # TODO: Create constants for 'cmu', 'human36m' strings.
 
+
+KPTS = {
+    'lfoot': 0,
+    'lknee': 1,
+    'lhip': 2,
+    'rhip': 3,
+    'rknee': 4,
+    'rfoot': 5,
+    'pelvis': 6,
+    'spine': 7,
+    'thorax': 8,
+    'neck': 9,
+    'lwrist': 10,
+    'lelbow': 11,
+    'lshoulder': 12,
+    'rshoulder': 13,
+    'relbow': 14,
+    'rwrist': 15,
+    'head': 16,
+}
+
 CONNECTIVITY_DICT = {
     'cmu': [(0, 2), (0, 9), (1, 0), (1, 17), (2, 12), (3, 0), (4, 3), (5, 4), (6, 2), (7, 6), (8, 7), (9, 10), (10, 11), (12, 13), (13, 14), (15, 1), (16, 15), (17, 18)],
     'coco': [(0, 1), (0, 2), (1, 3), (2, 4), (5, 7), (7, 9), (6, 8), (8, 10), (11, 13), (13, 15), (12, 14), (14, 16), (5, 6), (5, 11), (6, 12), (11, 12)],

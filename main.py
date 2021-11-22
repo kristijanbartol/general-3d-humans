@@ -5,6 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
 import kornia
+import numpy as np
 
 from dsac import CameraDSAC, PoseDSAC
 from dataset import Human36MDataset, CmuPanopticDataset, TRAIN, VALID, TEST, init_datasets
@@ -19,6 +20,8 @@ from visualize import store_overall_metrics, store_pose_prior_metrics, store_qua
 
 
 if __name__ == '__main__':
+    torch.manual_seed(0)
+    np.random.seed(0)
     # Parse command line args.
     opt, session_id, hyperparams_string = parse_args()
 
@@ -232,7 +235,6 @@ if __name__ == '__main__':
                 rot_error = torch.mean(torch.abs(R2_est_quat - R2_gt_quat))
 
                 all_rot_errors += rot_error.detach().numpy()
-                # TODO: Estimate translation.
                 all_trans_errors += 0.
             else:
                 Rs = gt_Rs
@@ -377,9 +379,9 @@ if __name__ == '__main__':
                                 pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
                             # TODO: Remove this?
-                            if opt.filter_bad:
-                                if pool_metrics.wavg.loss > 100.:
-                                    continue
+                            #if opt.filter_bad:
+                            #    if pool_metrics.wavg.loss > 100.:
+                            #        continue
 
                             log_stdout('TEST', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
 

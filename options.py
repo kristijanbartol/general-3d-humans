@@ -125,9 +125,6 @@ def parse_args():
     parser.add_argument('--test', dest='test', action='store_true',
         help='whether to test on test set')
 
-    parser.add_argument('--filter_bad', dest='filter_bad', action='store_true',
-        help='if using test, whether to filter bad 3D GT')
-
     parser.add_argument('--cpu', dest='cpu', action='store_true')
 
     parser.add_argument('--debug', dest='debug', action='store_true')

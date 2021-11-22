@@ -5,11 +5,13 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import itertools
+from sklearn.preprocessing import normalize
+from kornia.geometry.conversions import angle_axis_to_rotation_matrix
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
-from mvn.utils.vis import CONNECTIVITY_DICT
-from metrics import rel_mpjpe
+from mvn.utils.vis import CONNECTIVITY_DICT, KPTS
+from metrics import center_pelvis, rel_mpjpe
 from hypothesis import CameraHypothesisPool, CameraParams, HypothesisPool
 
 
@@ -94,7 +96,7 @@ class CameraDSAC(DSAC):
 
         return R_est, t_rel
 
-    def __score_nn(self, point_corresponds, R_est, t_est, Ks, Rs, ts):
+    def __score_nn(self, point_corresponds, R_est, Ks, Rs, ts):
         '''
         Feed 3D line distances into ScoreNN to obtain score for the hyp.
 
@@ -109,7 +111,7 @@ class CameraDSAC(DSAC):
         #    Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
-            Ks, Rs[0], R_est, ts[0], ts[1], device=self.device)
+            Ks, Rs[0], R_est[0], ts[0], ts[1], device=self.device)
 
         # Normalize and invert line distance values for NN.
         #model_input = line_dists / line_dists.max()
@@ -306,7 +308,7 @@ class PoseDSAC(DSAC):
         est_3d_pose_norm = ((est_3d_pose - mean) / std)
 
         # Zero-center around hip joint.
-        est_3d_pose_norm = est_3d_pose_norm - est_3d_pose_norm[0]
+        est_3d_pose_norm = center_pelvis(est_3d_pose_norm)
 
         # Extract body part lengths.
         if self.body_lengths_mode == 1 or self.body_lengths_mode == 2:
@@ -315,6 +317,21 @@ class PoseDSAC(DSAC):
             for (kpt1, kpt2) in connections:
                 lengths.append(torch.norm(est_3d_pose_norm[kpt1] - est_3d_pose_norm[kpt2]))
             lengths = torch.stack(lengths, dim=0)
+
+        # Orient pose towards the positive Z-axis.
+        n0 = torch.tensor([0., 0., 1.], dtype=torch.float32)
+        THREE_KPTS = [KPTS['lshoulder'], KPTS['rshoulder'], KPTS['pelvis']]
+        (a, b, c) = est_3d_pose_norm[THREE_KPTS[0]], \
+            est_3d_pose_norm[THREE_KPTS[1]], \
+            est_3d_pose_norm[THREE_KPTS[2]]
+        n1 = torch.cross(c - a, b - a)
+
+        #axis = normalize(np.cross(n0, n1))
+        axis = torch.cross(n0, n1) / torch.norm(torch.cross(n0, n1))
+        angle = torch.acos(torch.dot(n0, n1))
+
+        Rmat = angle_axis_to_rotation_matrix((angle * axis).unsqueeze(dim=0))
+        est_3d_pose_norm = est_3d_pose_norm @ Rmat[0]
 
         # Select network input based on body lengths mode.
         if self.body_lengths_mode == 0:
