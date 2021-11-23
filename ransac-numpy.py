@@ -65,7 +65,7 @@ def load_camera_params(subject_idx, cam_idxs):
     return Ks, Rs, ts
 
 
-def fundamental(M):
+def fundamental(M, IDXS):
     # Load predictions, ground truth and camera parameters.
     all_2d_preds = np.load(PRED_PATH)
     all_3d_gt = np.load(GT_PATH)
@@ -170,7 +170,7 @@ def fundamental(M):
 
         if error_3d > 1000.:
             continue
-        metrics.append([line_dists.mean(), error_R, error_t, error_2d, error_3d])
+        metrics.append([line_dists.mean(), error_R, error_t, error_2d, error_3d, R_est, t_rel_est])
 
         #print(f'{counter}. ({num_inliers}, {line_dists.mean():.3f}) -> '
         #    f'{error_R:.4f} {error_2d:.2f}, {error_3d:.2f}')
@@ -227,61 +227,81 @@ def fundamental(M):
     return our_metrics[1:], vanilla_metrics
     
 
-all_our_means = []
-all_our_stds = []
-all_vanilla_means = []
-all_vanilla_stds = []
+def compare_to_vanilla():
+    all_our_means = []
+    all_our_stds = []
+    all_vanilla_means = []
+    all_vanilla_stds = []
 
-num_frames_range = range(10, 100)
+    num_frames_range = range(10, 100)
 
-for M in num_frames_range:
-    our_repeated = []
-    vanilla_repeated = []
-    for j in range(10):
-        our_metrics, vanilla_metrics = fundamental(M)
-        if vanilla_metrics is None:
-            continue
-        our_repeated.append(our_metrics)
-        vanilla_repeated.append(vanilla_metrics)
-    all_our_means.append(np.array(our_repeated).mean(axis=0))
-    all_our_stds.append(np.array(our_repeated).std(axis=0))
-    
-    all_vanilla_means.append(np.array(vanilla_repeated).mean(axis=0))
-    all_vanilla_stds.append(np.array(vanilla_repeated).std(axis=0))
+    for M in num_frames_range:
+        our_repeated = []
+        vanilla_repeated = []
+        for j in range(10):
+            our_metrics, vanilla_metrics = fundamental(M=M, IDXS=IDXS)
+            if vanilla_metrics is None:
+                continue
+            our_repeated.append(our_metrics)
+            vanilla_repeated.append(vanilla_metrics)
+        all_our_means.append(np.array(our_repeated).mean(axis=0))
+        all_our_stds.append(np.array(our_repeated).std(axis=0))
+        
+        all_vanilla_means.append(np.array(vanilla_repeated).mean(axis=0))
+        all_vanilla_stds.append(np.array(vanilla_repeated).std(axis=0))
 
-all_our_means = np.array(all_our_means)
-all_our_stds = np.array(all_our_stds)
+    all_our_means = np.array(all_our_means)
+    all_our_stds = np.array(all_our_stds)
 
-all_vanilla_means = np.array(all_vanilla_means)
-all_vanilla_stds = np.array(all_vanilla_stds)
-
-
-x = np.array(num_frames_range)
-our_y = all_our_means[:, 3]
-our_upper = our_y + all_our_stds[:, 3]
-our_lower = np.clip(our_y - all_our_stds[:, 3], a_min=0, a_max=None)
-
-vanilla_y = all_vanilla_means[:, 3]
-vanilla_upper = np.clip(vanilla_y + all_vanilla_stds[:, 3], a_min=None, a_max=80.)
-vanilla_lower = np.clip(vanilla_y - all_vanilla_stds[:, 3], a_min=0, a_max=None)
+    all_vanilla_means = np.array(all_vanilla_means)
+    all_vanilla_stds = np.array(all_vanilla_stds)
 
 
-our_plt, = plt.plot(x, our_y, color='dodgerblue', label='Our model')
-plt.fill_between(x, our_upper, our_lower, color='crimson', alpha=0.2)
+    x = np.array(num_frames_range)
+    our_y = all_our_means[:, 3]
+    our_upper = our_y + all_our_stds[:, 3]
+    our_lower = np.clip(our_y - all_our_stds[:, 3], a_min=0, a_max=None)
 
-vanilla_plt, = plt.plot(x, vanilla_y, color='darkorange', label='Vanilla 8-point')
-plt.fill_between(x, vanilla_upper, vanilla_lower, color='lightgreen', alpha=0.2)
+    vanilla_y = all_vanilla_means[:, 3]
+    vanilla_upper = np.clip(vanilla_y + all_vanilla_stds[:, 3], a_min=None, a_max=80.)
+    vanilla_lower = np.clip(vanilla_y - all_vanilla_stds[:, 3], a_min=0, a_max=None)
 
-plt.legend(handles=[our_plt, vanilla_plt])
 
-plt.xlabel('Number of frames')
-plt.ylabel('3D error')
+    our_plt, = plt.plot(x, our_y, color='dodgerblue', label='Our model')
+    plt.fill_between(x, our_upper, our_lower, color='crimson', alpha=0.2)
 
-plt.style.use('seaborn')
+    vanilla_plt, = plt.plot(x, vanilla_y, color='darkorange', label='Vanilla 8-point')
+    plt.fill_between(x, vanilla_upper, vanilla_lower, color='lightgreen', alpha=0.2)
 
-plt.savefig(f'./results/8-point_{IDXS[0]}_{IDXS[1]}_new.png')
-np.save(f'./results/our_scores_{IDXS[0]}_{IDXS[1]}.npy', all_our_means)
-np.save(f'./results/vanilla_scores_{IDXS[0]}_{IDXS[1]}.npy', all_vanilla_means)
+    plt.legend(handles=[our_plt, vanilla_plt])
+
+    plt.xlabel('Number of frames')
+    plt.ylabel('3D error')
+
+    plt.style.use('seaborn')
+
+    plt.savefig(f'./results/8-point_{IDXS[0]}_{IDXS[1]}_new.png')
+    np.save(f'./results/our_scores_{IDXS[0]}_{IDXS[1]}.npy', all_our_means)
+    np.save(f'./results/vanilla_scores_{IDXS[0]}_{IDXS[1]}.npy', all_vanilla_means)
+
+
+def estimate_params():
+    np.random.seed(2022)
+    est_Rs = []
+    est_ts = []
+    for cam_idxs in [(0, 1), (0, 2), (0, 3)]:
+        our_metrics, _ = fundamental(M=M, IDXS=cam_idxs)
+        R_est, t_rel_est = our_metrics[-2:]
+        print(f'Selected params error ({cam_idxs}): {our_metrics[-3]}mm')
+        est_Rs.append(R_est)
+        est_ts.append(t_rel_est)
+    np.save('./results/est_Rs.npy', np.array(est_Rs, dtype=np.float32))
+    np.save('./results/est_ts.npy', np.array(est_ts, dtype=np.float32))
+
+
+if __name__ == '__main__':
+    #compare_to_vanilla()
+    estimate_params()
 
 
 '''
