@@ -14,7 +14,7 @@
                 "--posedsac_only",
                 //"--camdsac_only",
 
-                "--transfer", "-1",
+                "--transfer", "2",
 
                 //"--dataset", "cmu",
                 //"--cam_idxs", "1", "2", "3", "4", "6", "7", //"10", "12", "16", "18", "19", "22", "23", "30",
@@ -35,8 +35,10 @@
                 "--temp_gamma", "0.9",
 
                 "--train_iterations", "10",
-                "--valid_iterations", "5",
+                "--valid_iterations", "1",
                 "--test_iterations", "40",
+
+                "--use_estimated",
 
                 "--pose_hypotheses", "200",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
@@ -44,7 +46,7 @@
                 "--entropy_beta_pose", "0.01",
                 "--est_beta", "0.02",
                 "--exp_beta", "1.",
-                "--body_lengths_mode", "1",
+                "--body_lengths_mode", "2",
                 "--pose_batch_size", "16",
                 //"--weighted_selection"
 

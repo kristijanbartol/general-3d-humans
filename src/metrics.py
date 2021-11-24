@@ -61,7 +61,12 @@ class PoseMetrics():
         self.flush()
     
     def update(self, error, pose_3d):
-        self._errors.append(error.detach().numpy())
+        if not np.isnan(error.detach().numpy()):
+            self._errors.append(error.detach().numpy())
+        else:
+            self._errors.append(self._errors[-1])
+            print('Skipping NaN!')
+            return
 
         pose_3d = pose_3d.detach().numpy()
         lengths = np.empty(self.nseg, dtype=np.float32)

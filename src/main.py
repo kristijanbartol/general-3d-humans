@@ -8,7 +8,7 @@ import kornia
 import numpy as np
 
 from dsac import CameraDSAC, PoseDSAC
-from dataset import Human36MDataset, CmuPanopticDataset, TRAIN, VALID, TEST, init_datasets
+from dataset import init_datasets
 from loss import ReprojectionLoss3D, MPJPELoss
 from score import create_camera_nn, create_pose_nn
 from mvn.utils.vis import CONNECTIVITY_DICT
@@ -384,6 +384,9 @@ if __name__ == '__main__':
                             #        continue
 
                             log_stdout('TEST', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+
+                            if np.isnan(global_metrics.diff_to_triang):
+                                print('')
 
                         if opt.transfer == -1:
                             store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'test', pool_metrics)

@@ -358,9 +358,20 @@ class PoseDSAC(DSAC):
         for _ in range(0, self.hyps):
             sample_tuple = self.__sample_hyp(est_2d_pose, Ks, Rs, ts, hpool.triang is None)
             score = self.__score_nn(sample_tuple[0], mean, std)
+
+            #score = torch.nan_to_num(score)
+            #score[score != score] = 0.
+            #score = torch.where(torch.isnan(score), torch.zeros_like(score), score)
+
             if hpool.triang is None:
                 hpool.set_triang(sample_tuple[1])
             hpool.append(sample_tuple[0], score)
+
+            if torch.isnan(score):
+                print('')
+
+            if torch.isnan(sample_tuple[0][0][0]):
+                print('')
 
         # Softmax distribution from hypotheses scores.
         if self.gumbel:

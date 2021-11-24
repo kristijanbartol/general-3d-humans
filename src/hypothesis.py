@@ -17,6 +17,8 @@ class Hypothesis():
 
     @property
     def loss(self):
+        if torch.isnan(self.loss_fun(self.est_pose, self.gt_pose)):
+            print('')
         return self.loss_fun(self.est_pose, self.gt_pose)
 
     @property
@@ -143,6 +145,8 @@ class HypothesisPool():
         for hidx in range(self.nhyps):
             pose += self.poses[hidx] * self.scores[hidx]
         pose /= self.sorted_scores.sum()
+        if torch.isnan(pose[0][0]):
+            print('')
         return Hypothesis(pose, self.gt_3d, self.loss_fun)
 
     @property

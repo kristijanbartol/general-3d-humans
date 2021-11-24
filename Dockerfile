@@ -8,7 +8,7 @@ ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX"
 ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
 
-COPY . /poseDSAC/
+COPY . /generalizable-triangulation/
 
 RUN apt-get update && apt-get install -y git \
 	ninja-build \
@@ -63,4 +63,4 @@ RUN python3.7 -m pip install \
 	seaborn \
 	poseval@git+https://github.com/svenkreiss/poseval.git
 #RUN python3.7 -m pip install --no-cache-dir -e .
-WORKDIR /poseDSAC
+WORKDIR /generalizable-triangulation

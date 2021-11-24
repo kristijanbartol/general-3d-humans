@@ -164,6 +164,8 @@ def fundamental(M, IDXS):
         R_rel_gt_quat = R.from_dcm(R_rel_gt).as_quat()
         error_R = np.linalg.norm(R_rel_gt_quat - R_est_quat, ord=1)
 
+        R_est_abs = R_est @ Rs[0]
+
         # Evaluate translation.
         t2_est = -Rs[1] @ np.linalg.inv(Rs[0]) @ ts[0] + t_rel_est
         error_t = np.linalg.norm(t2_est - t_rel_gt, ord=2)
@@ -287,8 +289,8 @@ def compare_to_vanilla():
 
 def estimate_params():
     np.random.seed(2022)
-    est_Rs = []
-    est_ts = []
+    est_Rs = [ np.eye(3) ]
+    est_ts = [ np.zeros((3, 1)) ]
     for cam_idxs in [(0, 1), (0, 2), (0, 3)]:
         our_metrics, _ = fundamental(M=M, IDXS=cam_idxs)
         R_est, t_rel_est = our_metrics[-2:]

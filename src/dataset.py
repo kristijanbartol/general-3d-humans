@@ -44,7 +44,7 @@ ORD_SUBJECT_MAP = {
 class Human36MDataset(Dataset):
     '''A Dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, data_type, cam_idxs, num_joints=17, num_frames=30, num_iterations=50):
+    def __init__(self, rootdir, data_type, cam_idxs, use_estimated=False, num_joints=17, num_frames=30, num_iterations=50):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
@@ -62,6 +62,8 @@ class Human36MDataset(Dataset):
         self.preds_2d = dict.fromkeys(self.sidxs)
         self.gt_3d = dict.fromkeys(self.sidxs)
         self.bboxes = dict.fromkeys(self.sidxs)
+
+        self.use_estimated = use_estimated
 
         self.cam_idxs = cam_idxs
         self.num_cameras = len(cam_idxs)
@@ -84,7 +86,7 @@ class Human36MDataset(Dataset):
             sidx = int(dirname[1:])
             if not sidx in self.sidxs:
                 continue
-            Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs)
+            Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs, self.use_estimated)
             self.Ks[sidx] = Ks
             self.Rs[sidx] = Rs
             self.ts[sidx] = ts
@@ -132,7 +134,7 @@ class Human36MDataset(Dataset):
         # TODO: Obtain GT scale to estimate translation also.
 
     @staticmethod
-    def __load_camera_params(subject_idx, cam_idxs):
+    def __load_camera_params(subject_idx, cam_idxs, use_estimated=False):
         '''Loading camera parameters for given subject and camera subset.
 
         Loads camera parameters for a given subject and subset cameras.
@@ -152,6 +154,16 @@ class Human36MDataset(Dataset):
         Ks = np.stack(Ks, axis=0)
         Rs = np.stack(Rs, axis=0)
         ts = np.stack(ts, axis=0)
+
+        if use_estimated:
+            est_Rs = np.load('./results/est_Rs.npy')
+            est_ts = np.load('./results/est_ts.npy')
+
+            for cam_idx in cam_idxs:
+                #Rs[cam_idx] = est_Rs[cam_idx] @ Rs[0]
+                if cam_idx > 0:
+                    ts[cam_idx] = est_ts[cam_idx]
+
 
         return Ks, Rs, ts
 
@@ -256,7 +268,7 @@ TRANSFER_CAM_SETS = [
 
 class CmuPanopticDataset(Dataset):
 
-    def __init__(self, rootdir, data_type, cam_idxs, num_joints=19, num_frames=30, num_iterations=50):
+    def __init__(self, rootdir, data_type, cam_idxs, use_estimated=False, num_joints=19, num_frames=30, num_iterations=50):
         self.rootdir = rootdir
         self.data_type = data_type
         self.cam_idxs = cam_idxs
@@ -265,6 +277,8 @@ class CmuPanopticDataset(Dataset):
         self.num_iterations = num_iterations
 
         self.num_views = len(self.cam_idxs)
+
+        self.use_estimated = use_estimated
 
         # Load data.
         self.Ks, self.Rs, self.ts = self.__load_camera_params()
@@ -387,15 +401,24 @@ def init_datasets(opt):
         #    cam_test_set.append(TRANSFER_CAM_SETS[set_idx])
         cam_test_set.append(TRANSFER_CAM_SETS[opt.transfer])
 
-    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.train_iterations)
-    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, opt.num_joints, opt.num_frames, opt.valid_iterations)
+    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, use_estimated=False, num_joints=opt.num_joints, 
+        num_frames=opt.num_frames, num_iterations=opt.train_iterations)
+    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, use_estimated=False, num_joints=opt.num_joints, 
+        num_frames=opt.num_frames, num_iterations=opt.valid_iterations)
 
+    test_set = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], use_estimated=opt.use_estimated, 
+        num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=opt.test_iterations)
+
+    '''
+    # TODO: Improve this.
     for set_idx, _ in enumerate(cam_test_set):
-        # TODO: Improve this if.
         if cam_test_set[set_idx] == [0, 1, 2, 3]: #or len(cam_test_set) < 4:  # second condition is for CamDSAC
-            test_set = Human36MDataset('./results/human36m', TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
+            test_set = Human36MDataset('./results/human36m', TEST, cam_test_set[set_idx], use_estimated=opt.use_estimated, 
+                num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=opt.test_iterations)
         else:
-            test_set = CmuPanopticDataset('./results/cmu', TEST, cam_test_set[set_idx], opt.num_joints, opt.num_frames, opt.test_iterations)
+            test_set = CmuPanopticDataset('./results/cmu', TEST, cam_test_set[set_idx], use_estimated=False, num_joints=opt.num_joints, 
+                num_frames=opt.num_frames, num_iterations=opt.test_iterations)
         test_sets.append(test_set)
+    '''
 
-    return train_set, valid_set, test_sets
+    return train_set, valid_set, [test_set]
