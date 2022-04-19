@@ -7,6 +7,8 @@ It contains the instructions on installation and demos for training and testing
 the presented model, as well as for estimating fundamental matrices. We include
 the neccessary data needed to run the demos.
 
+<img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
+
 ## Citation
 
 If you use our model in your research, please reference our paper:
