@@ -2,12 +2,35 @@
 
 ## Introduction
 
-This is the source code for the paper "Generalizable Human Pose Triangulation".
+This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280]).
 It contains the instructions on installation and demos for training and testing
-the presented model, as well as for estimating relative camera poses. We include
-the neccessary data needed to run the demos. However, it is probably required to
-first build a docker image and run the container --- docker instructions are also
-provided.
+the presented model, as well as for estimating fundamental matrices. We include
+the neccessary data needed to run the demos.
+
+## Citation
+
+If you use our model in your research, please reference our paper:
+
+```
+@inproceedings{Bartol:CVPR:2022,
+   title = {Generalizable Human Pose Triangulation},
+   author = {Bartol, Kristijan and Bojani\'{c}, David and Petkovi\'{c}, Tomislav and Pribani\'{c}, Tomislav},
+   booktitle = {Proceedings of IEEE/CVF Conf.~on Computer Vision and Pattern Recognition (CVPR)},
+   month = jun,
+   year = {2022}
+}
+```
+
+## Work-In-Progress
+
+We plan to completely prepare the source code with the pretrained models, demos, and videos by mid May. The to-do list consists of:
+
+- [ ] Refactor the source code
+- [ ] Complete documentation
+- [ ] Pretrained pose estimation learning model
+- [ ] Pretrained fundamental matrix estimation learning model
+- [ ] Demo (main) scripts to run training, inference, and evaluation
+- [ ] Video demonstration
 
 ## Usage
 
@@ -78,14 +101,3 @@ The results for base, intra, and inter configurations are:
 The data used for the above commands is in ./data/ folder. Note that, in this submission, we only 
 include subject 1 (Human3.6M) for training, but it should be sufficient to reproduce
 the original results.
-
-
-## Reproducibility
-
-Unfortunately, only a single triangulation experiment is reproducible at the moment 
-(the base experiment on Human3.6M, see Table 4 in the main paper). We also wanted to 
-include CMU experiments, but the input data was too large for the Supplementary submission.
-
-Regarding fundamental matrix part, it is possible to generate relative camera pose estimations
-(extrinsic parameters). The parameters are not explicitly reported in the paper, but are used 
-for evaluations in Table 6, as well as the experiments in the Supplementary Appendix (see appendix.pdf).
