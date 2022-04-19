@@ -10,7 +10,6 @@ vis/
 
 git_token
 
-*.png
 *.pdf
 *.zip
 **.npy
