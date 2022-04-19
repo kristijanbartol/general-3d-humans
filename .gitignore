@@ -1,3 +1,4 @@
+pretrained/
 data/
 results/
 logs/
@@ -12,3 +13,4 @@ git_token
 *.png
 *.pdf
 *.zip
+**.npy
