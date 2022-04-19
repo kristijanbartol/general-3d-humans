@@ -48,9 +48,6 @@ class RatioVariances():
 class PoseMetrics():
 
     def __init__(self, dataset):
-        #self._all_segments = [[0, 1], [1, 2], [2, 3], [0, 4], [4, 5],
-        #[5, 6], [0, 7], [7, 8], [8, 14], [14, 15], [15, 16],
-        #[8, 11], [11, 12], [12, 13], [8, 9], [9, 10]]
 
         self.dataset = dataset
         self.segments = CONNECTIVITY_DICT[self.dataset]
@@ -179,20 +176,6 @@ class GlobalMetrics():
         ]
 
         return values
-
-        '''
-        metrics_dict['weight'] = [self.wavg.ratio_variances.left_right]
-        metrics_dict['avg'] = [self.avg.ratio_variances.left_right]
-        metrics_dict['most'] = [self.most.ratio_variances.left_right]
-        metrics_dict['least'] = [self.least.ratio_variances.left_right]
-        metrics_dict['stoch'] = [self.stoch.ratio_variances.left_right]
-        metrics_dict['random'] = [self.random.ratio_variances.left_right]
-        metrics_dict['best'] = [self.best.ratio_variances.left_right]
-        metrics_dict['worst'] = [self.worst.ratio_variances.left_right]
-        '''
-        #metrics_dict['triang'] = [self.triang.ratio_variances.left_right]
-
-        return metrics_dict
 
 
 

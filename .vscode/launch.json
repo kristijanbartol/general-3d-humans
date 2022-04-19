@@ -14,7 +14,7 @@
                 "--posedsac_only",
                 //"--camdsac_only",
 
-                "--transfer", "2",
+                "--transfer", "-1",
 
                 //"--dataset", "cmu",
                 //"--cam_idxs", "1", "2", "3", "4", "6", "7", //"10", "12", "16", "18", "19", "22", "23", "30",
@@ -36,7 +36,7 @@
 
                 "--train_iterations", "10",
                 "--valid_iterations", "1",
-                "--test_iterations", "40",
+                //"--test_iterations", "40",
 
                 "--use_estimated",
 

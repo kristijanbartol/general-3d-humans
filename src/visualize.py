@@ -47,27 +47,6 @@ def store_qualitative(session_id, epoch_idx, iteration, dataset, data_type, pool
     # subplot title size
     fig.update_annotations(font_size=60)
 
-    '''
-    for j, hyp_name in enumerate(hyps_dict):
-        pose = hyps_dict[hyp_name]
-
-        for i in range(len(segments)):
-            fig.add_trace(go.Scatter3d(
-                x=[pose[segments[i][0], 0], pose[segments[i][1], 0], None],
-                y=[pose[segments[i][0], 1], pose[segments[i][1], 1], None],
-                z=[pose[segments[i][0], 2], pose[segments[i][1], 2], None],
-                marker=dict(
-                    size=7,
-                    color=pose[i, 2],
-                    colorscale='Viridis',
-                ),
-                line=dict(
-                    color=pose[i, 2],
-                    width=5
-                )
-            ), row=1, col=j + 1)
-    '''
-
 
 
     for j, hyp_name in enumerate(hyps_dict):
@@ -190,29 +169,6 @@ def store_pose_prior_metrics(session_id, epoch_idx, dataset, data_type, global_m
 
     plt.savefig(fig_path)
     plt.close()
-
-    #pd_metrics = pd.DataFrame(metrics_dict)
-
-    '''
-    plt.figure()
-    sns.set_theme(style="darkgrid")
-    fig = sns.barplot(data=pd_metrics)
-    fig.set_yscale("log")
-
-    fig.get_figure().savefig(fig_path)
-
-    # TODO: Fix problem with non-closed figures.
-    plt.close(fig.get_figure())
-    '''
-
-    '''
-    # TODO: Remove this from here.
-    logs_dir = f'./logs/{session_id}'
-    values = np.array([x[1] for x in metrics_dict.items()])
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-    np.save(os.path.join(logs_dir, 'pose_prior.npy'), values)
-    '''
 
 
 def store_transfer_learning_metrics(session_id, epoch_idx, errors):

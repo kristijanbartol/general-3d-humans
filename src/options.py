@@ -46,10 +46,6 @@ def parse_args():
     parser.add_argument('--valid_iterations', type=int, default=50,
         help='number of training iterations per epoch (= dataset length)')
 
-    # TODO: Remove this for final experiments.
-    parser.add_argument('--test_iterations', type=int, default=40,
-        help='number of test iterations per epoch (= dataset length) [NOTE: should be ALL]')
-
     parser.add_argument('--num_epochs', '-e', type=int, default=100,
         help='number of epochs (= num of validations)')
 
@@ -136,9 +132,7 @@ def parse_args():
 
     opt = parser.parse_args()
 
-    #if len(opt.session) > 0:
-    #    opt.session = '_' + opt.session
-    #sid = f'chyps{opt.camera_hypotheses}_cphyps{opt.pose_hypotheses}_ssize{opt.sample_size}_f{opt.num_frames}_{opt.session}'
+
     session_id = datetime.now().strftime('%d-%b-%Y_%H:%M:%S')
     hyperparams_string = json.dumps(vars(opt), indent=4)
 

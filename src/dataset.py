@@ -6,7 +6,8 @@ import random
 from torch.utils.data import Dataset
 
 
-TRAIN_SIDXS = [1, 5, 6, 7]
+#TRAIN_SIDXS = [1, 5, 6, 7]
+TRAIN_SIDXS = [1]
 VAL_SIDXS = [8]
 TEST_SIDXS = [9, 11]
 
@@ -160,7 +161,7 @@ class Human36MDataset(Dataset):
             est_ts = np.load('./results/est_ts.npy')
 
             for cam_idx in cam_idxs:
-                #Rs[cam_idx] = est_Rs[cam_idx] @ Rs[0]
+                Rs[cam_idx] = est_Rs[cam_idx] @ Rs[0]
                 if cam_idx > 0:
                     ts[cam_idx] = est_ts[cam_idx]
 
@@ -387,7 +388,7 @@ class CmuPanopticDataset(Dataset):
 
 
 def init_datasets(opt):
-    data_rootdir = f'./results/{opt.dataset}'
+    data_rootdir = f'./data/{opt.dataset}'
     dataset = Human36MDataset if opt.dataset == 'human36m' else CmuPanopticDataset
 
     cam_test_set = []
@@ -406,19 +407,8 @@ def init_datasets(opt):
     valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, use_estimated=False, num_joints=opt.num_joints, 
         num_frames=opt.num_frames, num_iterations=opt.valid_iterations)
 
-    test_set = Human36MDataset('./results/human36m', TEST, [0, 1, 2, 3], use_estimated=opt.use_estimated, 
-        num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=opt.test_iterations)
-
-    '''
-    # TODO: Improve this.
-    for set_idx, _ in enumerate(cam_test_set):
-        if cam_test_set[set_idx] == [0, 1, 2, 3]: #or len(cam_test_set) < 4:  # second condition is for CamDSAC
-            test_set = Human36MDataset('./results/human36m', TEST, cam_test_set[set_idx], use_estimated=opt.use_estimated, 
-                num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=opt.test_iterations)
-        else:
-            test_set = CmuPanopticDataset('./results/cmu', TEST, cam_test_set[set_idx], use_estimated=False, num_joints=opt.num_joints, 
-                num_frames=opt.num_frames, num_iterations=opt.test_iterations)
-        test_sets.append(test_set)
-    '''
+    # TODO: Update magic number.
+    test_set = Human36MDataset('./data/human36m', TEST, [0, 1, 2, 3], use_estimated=opt.use_estimated, 
+        num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=40)
 
     return train_set, valid_set, [test_set]
