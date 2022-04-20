@@ -3,9 +3,9 @@
 ## Introduction
 
 This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280) (the most up-to-date preprint available as of **Apr 21st**).
-It contains the instructions on installation and demos for training and testing
-the presented model, as well as for estimating fundamental matrices. We include
-the neccessary data needed to run the demos.
+It will contain the instructions on installation and demos for training and testing
+the presented model, as well as for estimating fundamental matrices. We will include
+the neccessary data needed to run the demos. The materials should be complete by mid May.
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
