@@ -1,4 +1,4 @@
-# Author: Kristijan Bartol (FER, University of Zagreb).
+# Author: Kristijan Bartol
 
 
 import torch

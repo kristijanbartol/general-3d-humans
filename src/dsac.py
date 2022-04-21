@@ -1,5 +1,5 @@
-# Author: Kristijan Bartol (FER, University of Zagreb).
-# Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py.
+# Author: Kristijan Bartol
+# Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py
 
 
 from typing import Callable, Optional, Tuple
