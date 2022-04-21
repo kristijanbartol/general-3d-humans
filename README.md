@@ -2,10 +2,9 @@
 
 ## Introduction
 
-This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280) (the most up-to-date preprint along with the Appendix will be available tomorrow, **Apr 21st**).
-The repository will contain the instructions on installation and demos for training and testing
-the presented model, as well as for estimating fundamental matrices. We will include
-the neccessary data needed to run the demos. The materials should be complete by mid May.
+This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280).
+The repository will soon contain the complete instructions and demos for training and inference of
+the models. The materials should be complete by **mid May**.
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
@@ -30,7 +29,7 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [X] Instructions for training pose estimation model
 - [X] Fundamental matrix estimation algorithm
 - [ ] Refactor the source code
-- [ ] Complete documentation
+- [ ] Complete the documentation
 - [ ] Pretrained pose estimation learning model
 - [ ] Pretrained fundamental matrix estimation learning model
 - [ ] Demo (main) scripts to run training, inference, and evaluation
@@ -105,3 +104,17 @@ The results for base, intra, and inter configurations are:
 The data used for the above commands is in ./data/ folder. Note that, in this submission, we only 
 include subject 1 (Human3.6M) for training, but it should be sufficient to reproduce
 the original results.
+
+### Acknowledgements
+
+Parts of the source code were adapted from [cvlab-dresden/DSAC](https://github.com/cvlab-dresden/DSAC) and [karfly/learnable-triangulation-pytorch](https://github.com/karfly/learnable-triangulation-pytorch) and directly inspired by some of the following publications:
+
+[1] [DSAC - Differentiable RANSAC for Camera Localization](https://arxiv.org/abs/1611.05705)
+
+[2] [Learnable Triangulation of Human Pose](https://arxiv.org/abs/1905.05754)
+
+[3] [Neural-Guided RANSAC: Learning Where to Sample Model Hypotheses](https://arxiv.org/abs/1905.04132)
+
+[4] [Categorical Reparameterization with Gumbel-Softmax](https://arxiv.org/abs/1611.01144)
+
+[5] [The Concrete Distribution: A Continuous Relaxation of Discrete Random Variables](https://arxiv.org/abs/1611.00712)
