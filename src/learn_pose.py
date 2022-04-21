@@ -1,5 +1,6 @@
 # Author: Kristijan Bartol (FER, University of Zagreb).
 
+
 from metrics import GlobalMetrics
 import torch
 import torch.optim as optim
@@ -62,9 +63,21 @@ if __name__ == '__main__':
     if opt.debug: torch.autograd.set_detect_anomaly(True)
     
     # Create "pose DSAC" (referencing "DSAC - Differentiable RANSAC for Camera Localization").
-    pose_dsac = PoseDSAC(opt.pose_hypotheses, opt.num_joints, opt.entropy_beta_pose, opt.min_entropy, 
-        opt.entropy_to_scores, opt.temp, opt.gumbel, opt.hard, opt.body_lengths_mode, 
-        opt.weighted_selection, opt.exp_beta, opt.est_beta, pose_nn, pose_loss)
+    pose_dsac = PoseDSAC(
+        hyps=opt.pose_hypotheses, 
+        num_joints=opt.num_joints, 
+        entropy_beta_pose=opt.entropy_beta_pose, 
+        entropy_to_scores=opt.entropy_to_scores, 
+        temp=opt.temp, 
+        gumbel=opt.gumbel, 
+        hard=opt.hard, 
+        body_lengths_mode=opt.body_lengths_mode, 
+        weighted_selection=opt.weighted_selection, 
+        exp_beta=opt.exp_beta, 
+        est_beta=opt.est_beta, 
+        score_nn=pose_nn, 
+        loss_function=pose_loss
+    )
     
     # Create torch data loader.
     train_dataloader = DataLoader(train_set, shuffle=False,

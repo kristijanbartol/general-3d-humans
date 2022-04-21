@@ -1,3 +1,6 @@
+# Author: Kristijan Bartol (FER, University of Zagreb).
+
+
 import argparse
 import json
 from datetime import datetime
@@ -68,9 +71,6 @@ def parse_args():
         help='entropy coeficient (the more, the stronger the regularization)')
 
     parser.add_argument('--entropy_beta_pose', '-ebp', type=float, default=1.,
-        help='entropy coeficient (the more, the stronger the regularization)')
-        
-    parser.add_argument('--min_entropy', type=float, default=0.,
         help='entropy coeficient (the more, the stronger the regularization)')
 
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.0001, help='learning rate')

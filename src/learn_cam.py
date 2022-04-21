@@ -1,5 +1,6 @@
 # Author: Kristijan Bartol (FER, University of Zagreb).
 
+
 from metrics import CameraGlobalMetrics
 import torch
 import torch.optim as optim
@@ -61,7 +62,7 @@ if __name__ == '__main__':
 
     # Create "camera DSAC" (referencing "DSAC - Differentiable RANSAC for Camera Localization").
     camera_dsac = CameraDSAC(opt.camera_hypotheses, opt.sample_size, opt.inlier_threshold, 
-        opt.inlier_beta, opt.entropy_beta_cam, opt.min_entropy, opt.entropy_to_scores, 
+        opt.inlier_beta, opt.entropy_beta_cam, opt.entropy_to_scores, 
         opt.temp, opt.gumbel, opt.hard, opt.exp_beta, opt.est_beta, camera_nn, camera_loss)
 
     # Create torch data loader.

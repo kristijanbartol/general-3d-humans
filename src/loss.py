@@ -1,15 +1,19 @@
+# Author: Kristijan Bartol (FER, University of Zagreb).
+
+
 import torch
 import kornia
 
 from mvn.utils.multiview import evaluate_projection, evaluate_reconstruction
 from metrics import rel_mpjpe
+from types import LossFunction
 
 
 def cross_entropy_loss(est, gt):
     return -torch.log(torch.exp(est[gt.argmax()]) / torch.sum(torch.exp(est)))
 
 
-class QuaternionLoss:
+class QuaternionLoss(LossFunction):
     '''
     Calculate loss based on the difference between the rotations (in quaternions).
     '''
@@ -26,7 +30,7 @@ class QuaternionLoss:
         return torch.norm(quat_est - quat_gt, p=1)
 
 
-class ReprojectionLoss3D:
+class ReprojectionLoss3D(LossFunction):
     '''Calculate loss based on the reprojection of points.
 
     '''
@@ -52,7 +56,7 @@ class ReprojectionLoss3D:
         return error_3d
 
 
-class MPJPELoss():
+class MPJPELoss(LossFunction):
     '''Calculate MPJPE loss.
     
     '''

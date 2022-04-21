@@ -1,7 +1,8 @@
 # Author: Kristijan Bartol (FER, University of Zagreb).
 # Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py.
 
-from typing import Tuple
+
+from typing import Callable, Optional, Tuple
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -14,14 +15,7 @@ from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
 from mvn.utils.vis import CONNECTIVITY_DICT, KPTS
 from metrics import center_pelvis, rel_mpjpe
 from hypothesis import CameraHypothesisPool, CameraParams, HypothesisPool
-
-
-class DSAC:
-    '''Abstract DSAC class.
-    
-    '''
-    def __init__(self):
-        pass
+from types import DSAC, LossFunction
 
 
 class CameraDSAC(DSAC):
@@ -29,17 +23,35 @@ class CameraDSAC(DSAC):
     Differentiable RANSAC for camera autocalibration.
     '''
 
-    def __init__(self, hyps, sample_size, inlier_thresh, inlier_beta, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, exp_beta, est_beta, score_nn, loss_function, scale=None, device='cpu'):
-        '''
-        Constructor.
-        hyps -- number of hypotheses (trials) for each CameraDSAC iteration
-        sample_size -- number of point correspondences to use for camera parameter estimation
-        inlier_thresh -- threshold used in the soft inlier count, its measured in relative image size (1 = image width)
-        inlier_beta -- scaling factor within the sigmoid of the soft inlier count
-        loss_function -- function to compute the quality of estimated line parameters wrt ground truth
-        scale --- scalar, GT scale, used to obtain proper translation
-        device --- 'cuda' or 'cpu'
+    def __init__(
+        self, 
+        hyps: int, 
+        sample_size: int, 
+        inlier_thresh: float, 
+        inlier_beta: float, 
+        entropy_beta: float, 
+        entropy_to_scores: bool,
+        temp: float, 
+        gumbel: bool, 
+        hard: bool, 
+        exp_beta: float, 
+        est_beta: float, 
+        score_nn: Callable, 
+        loss_function: LossFunction, 
+        scale: Optional[float], 
+        device: str = 'cpu'
+    ) -> None:
+        ''' CameraDSAC constructor.
+        
+            Parameters
+            ----------
+            hyps -- number of hypotheses (trials) for each CameraDSAC iteration
+            sample_size -- number of point correspondences to use for camera parameter estimation
+            inlier_thresh -- threshold used in the soft inlier count, its measured in relative image size (1 = image width)
+            inlier_beta -- scaling factor within the sigmoid of the soft inlier count
+            loss_function -- function to compute the quality of estimated line parameters wrt ground truth
+            scale --- scalar, GT scale, used to obtain proper translation
+            device --- 'cuda' or 'cpu'
         '''
 
         self.hyps = hyps
@@ -52,7 +64,6 @@ class CameraDSAC(DSAC):
         self.exp_beta = exp_beta
         self.entropy_beta = entropy_beta
         self.est_beta = est_beta
-        self.min_entropy = min_entropy
         self.entropy_to_scores = entropy_to_scores
 
         self.gumbel = gumbel
@@ -141,20 +152,22 @@ class CameraDSAC(DSAC):
         return R_rel @ R_init, t_init + t_rel
 
     def __call__(self, point_corresponds, gt_Ks, gt_Rs, gt_ts, points_3d, metrics):
-        '''
-        Perform robust, differentiable autocalibration.
+        ''' Perform robust, differentiable autocalibration.
 
-        Returns the expected loss of choosing a good camera params hypothesis, used for backprop.
-        Labels are used to calculate 3D reprojection loss. Another possibility is to compare
-        rotations and translations.
-        point_corresponds -- predicted 2D points for pairs of images, array of shape (Mx2x2) where
-                M is the number of frames
-                2 is the number of views
-                2 is the number of coordinates (x, y)
-        gt_3d -- ground truth labels for the set of frames, array of shape (MxJx3) where
-                M is the number of frames
-                J is the number of joints
-                3 is the number of coordinates (x, y, z)
+            Returns the expected loss of choosing a good camera params hypothesis, used for backprop.
+            Labels are used to calculate 3D reprojection loss. Another possibility is to compare
+            rotations and translations.
+        
+            Parameters
+            ----------
+            point_corresponds -- predicted 2D points for pairs of images, array of shape (Mx2x2) where
+                    M is the number of frames
+                    2 is the number of views
+                    2 is the number of coordinates (x, y)
+            gt_3d -- ground truth labels for the set of frames, array of shape (MxJx3) where
+                    M is the number of frames
+                    J is the number of joints
+                    3 is the number of coordinates (x, y, z)
         '''
         
         gt_params = CameraParams(gt_Ks[0], gt_Ks[1], gt_Rs[0], gt_ts[0], 
@@ -212,25 +225,41 @@ class CameraDSAC(DSAC):
 
 
 class PoseDSAC(DSAC):
-    '''
-    Differentiable RANSAC for pose triangulation.
+    ''' Differentiable RANSAC for pose triangulation.
+    
     '''
 
-    def __init__(self, hyps, num_joints, entropy_beta, min_entropy, entropy_to_scores,
-            temp, gumbel, hard, body_lengths_mode, weighted_selection, exp_beta, est_beta,
-            score_nn, loss_function, scale=None, device='cpu'):
-        '''
-        Constructor.
-        hyps -- number of hypotheses (trials) for each PoseDSAC iteration
-        loss_function -- function to estimate the quality of triangulated poses
-        scale --- scalar, GT scale, used to obtain proper translation
-        device --- 'cuda' or 'cpu'
+    def __init__(
+        self, 
+        hyps: int, 
+        num_joints: int, 
+        entropy_beta: float, 
+        entropy_to_scores: bool,
+        temp: float, 
+        gumbel: bool, 
+        hard: bool, 
+        body_lengths_mode: bool, 
+        weighted_selection: bool, 
+        exp_beta: float, 
+        est_beta: float,
+        score_nn: Callable, 
+        loss_function: LossFunction, 
+        scale: Optional[float], 
+        device: str = 'cpu'
+    ) -> None:
+        ''' PoseDSAC constructor.
+        
+            Parameters
+            ----------
+            hyps -- number of hypotheses (trials) for each PoseDSAC iteration
+            loss_function -- function to estimate the quality of triangulated poses
+            scale --- scalar, GT scale, used to obtain proper translation
+            device --- 'cuda' or 'cpu'
         '''
         self.hyps = hyps
         self.num_joints = num_joints
 
         self.entropy_beta = entropy_beta
-        self.min_entropy = min_entropy
         self.temp = temp
         self.est_beta = est_beta
         self.exp_beta = exp_beta
@@ -260,13 +289,14 @@ class PoseDSAC(DSAC):
         return triangulate_point_from_multiple_views_linear_torch(Ps, points_2d)
 
     def __sample_hyp(self, est_2d_pose, Ks, Rs, ts, calc_triang):
-        '''
-        Select a random subset of point correspondences and calculate R and t.
+        ''' Select a random subset of point correspondences and calculate R and t.
 
-        est_2d_pose --- CxJx2
-        Ks --- Cx3x3, GT or estimated intrinsics
-        Rs --- Cx3x3, GT or estimated intrinsics
-        ts --- Cx3x3, GT or estimated intrinsics
+            Parameters
+            ----------
+            est_2d_pose --- CxJx2
+            Ks --- Cx3x3, GT or estimated intrinsics
+            Rs --- Cx3x3, GT or estimated intrinsics
+            ts --- Cx3x3, GT or estimated intrinsics
         '''
         num_cameras = est_2d_pose.shape[0]
         num_joints = est_2d_pose.shape[1]
@@ -300,10 +330,11 @@ class PoseDSAC(DSAC):
         return pose_3d, baseline_pose
 
     def __score_nn(self, est_3d_pose, mean, std):
-        '''
-        Feed 3D pose coordinates into ScoreNN to obtain score for the hyp.
+        ''' Feed 3D pose coordinates into ScoreNN to obtain score for the hyp.
 
-        est_3d_pose
+            Parameters
+            ----------
+            est_3d_pose
         '''
         # Standardize pose.
         est_3d_pose_norm = ((est_3d_pose - mean) / std)
@@ -345,14 +376,15 @@ class PoseDSAC(DSAC):
         return self.score_nn(network_input.cuda())
 
     def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d, mean, std, metrics):
-        '''
-        Perform robust, differentiable triangulation.
+        ''' Perform robust, differentiable triangulation.
 
-        est_2d_pose -- predicted 2D points for B frames: (CxJx2)
-        Ks -- GT/estimated intrinsics for B frames: (Cx3x3)
-        Rs -- GT/estimated rotations for B frames: (Cx3x3)
-        ts -- GT/estimated translations for B frames: (Cx3x1)
-        gts_3d -- GT 3D poses: (Jx3)
+            Parameters
+            ----------
+            est_2d_pose -- predicted 2D points for B frames: (CxJx2)
+            Ks -- GT/estimated intrinsics for B frames: (Cx3x3)
+            Rs -- GT/estimated rotations for B frames: (Cx3x3)
+            ts -- GT/estimated translations for B frames: (Cx3x1)
+            gts_3d -- GT 3D poses: (Jx3)
         '''
         hpool = HypothesisPool(self.hyps, self.num_joints, gt_3d, self.loss_function, device=self.device)
 
