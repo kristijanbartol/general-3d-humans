@@ -27,6 +27,8 @@ If you use our model in your research, please reference our paper:
 
 We plan to completely prepare the source code with the pretrained models, demos, and videos by mid May. The to-do list consists of:
 
+- [X] Instructions for training pose estimation model
+- [X] Fundamental matrix estimation algorithm
 - [ ] Refactor the source code
 - [ ] Complete documentation
 - [ ] Pretrained pose estimation learning model
