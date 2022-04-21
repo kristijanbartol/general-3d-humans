@@ -1,4 +1,5 @@
-# Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py
+# Author: Kristijan Bartol (FER, University of Zagreb).
+# Inspired by: https://github.com/vislearn/DSACLine/blob/master/dsac.py.
 
 from typing import Tuple
 import torch

@@ -1,4 +1,4 @@
-# Created by: Kristijan Bartol (FER, University of Zagreb).
+# Author: Kristijan Bartol (FER, University of Zagreb).
 
 from metrics import GlobalMetrics
 import torch

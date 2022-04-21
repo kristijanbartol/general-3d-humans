@@ -1,3 +1,5 @@
+# Author: Kristijan Bartol (FER, University of Zagreb).
+
 from metrics import CameraGlobalMetrics
 import torch
 import torch.optim as optim
