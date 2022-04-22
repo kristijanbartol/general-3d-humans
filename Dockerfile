@@ -8,7 +8,7 @@ ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX"
 ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
 
-COPY . /generalizable-triangulation/
+COPY . /general-3d-humans/
 
 RUN apt-get update && apt-get install -y git \
 	ninja-build \
@@ -22,19 +22,9 @@ RUN apt-get update && apt-get install -y git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install xtcocotools
-RUN python3.7 -m pip install cython xtcocotools
-
-# Install MMCV
-#RUN python3.7 -m pip install mmcv-full==latest+torch1.6.0+cu101 -f https://download.openmmlab.com/mmcv/dist/index.html
-
-# Install MMPose
-#RUN conda clean --all
-#RUN git clone https://github.com/open-mmlab/mmpose.git /mmpose
-#WORKDIR /mmpose/
-#RUN mkdir -p /mmpose/data
-#ENV FORCE_CUDA="1"
 RUN python3.7 -m pip install \
+	cython \
+	xtcocotools \
 	cycler==0.10.0 \
 	decorator==4.4.0 \
 	easydict==1.9 \
@@ -55,12 +45,12 @@ RUN python3.7 -m pip install \
 	tensorboard \
 	kornia \
 	h5py==2.10.0 \
-#	mayavi \
 	scikit-learn \
 	plotly \
 	kaleido \
 	pandas \
 	seaborn \
 	poseval@git+https://github.com/svenkreiss/poseval.git
-#RUN python3.7 -m pip install --no-cache-dir -e .
-WORKDIR /generalizable-triangulation
+
+WORKDIR /general-3d-humans
+

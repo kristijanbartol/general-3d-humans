@@ -66,7 +66,7 @@ if __name__ == '__main__':
     pose_dsac = PoseDSAC(
         hyps=opt.pose_hypotheses, 
         num_joints=opt.num_joints, 
-        entropy_beta_pose=opt.entropy_beta_pose, 
+        entropy_beta=opt.entropy_beta_pose, 
         entropy_to_scores=opt.entropy_to_scores, 
         temp=opt.temp, 
         gumbel=opt.gumbel, 

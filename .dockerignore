@@ -1,6 +1,8 @@
 __pycache__/
 .vscode/
 
+assets/
+human36m/
 data/
 logs/
 models/

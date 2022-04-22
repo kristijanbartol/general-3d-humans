@@ -42,7 +42,6 @@
 
                 "--pose_hypotheses", "200",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
-                //"--layers_posedsac", "200", "300", "200",
                 "--entropy_beta_pose", "0.01",
                 "--est_beta", "0.02",
                 "--exp_beta", "1.",
@@ -51,7 +50,6 @@
                 //"--weighted_selection"
 
                 "--test",
-                //"--filter_bad",
             ]
         }
     ]

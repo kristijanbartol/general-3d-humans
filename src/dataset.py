@@ -84,7 +84,7 @@ class Human36MDataset(Dataset):
         # Collect precalculated correspondences, camera params and and 3D GT,
         # for every subject, based on folder indexes.
         for dirname in os.listdir(rootdir):
-            sidx = int(dirname[1:])
+            sidx = int(dirname[1:]) if dirname[0] == 'S' else -1
             if not sidx in self.sidxs:
                 continue
             Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs, self.use_estimated)

@@ -6,7 +6,7 @@ import kornia
 
 from mvn.utils.multiview import evaluate_projection, evaluate_reconstruction
 from metrics import rel_mpjpe
-from types import LossFunction
+from abstract import LossFunction
 
 
 def cross_entropy_loss(est, gt):

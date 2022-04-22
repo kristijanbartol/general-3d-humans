@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import itertools
-from sklearn.preprocessing import normalize
 from kornia.geometry.conversions import angle_axis_to_rotation_matrix
 
 from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
@@ -15,7 +14,7 @@ from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
 from mvn.utils.vis import CONNECTIVITY_DICT, KPTS
 from metrics import center_pelvis, rel_mpjpe
 from hypothesis import CameraHypothesisPool, CameraParams, HypothesisPool
-from types import DSAC, LossFunction
+from abstract import DSAC, LossFunction
 
 
 class CameraDSAC(DSAC):
@@ -38,7 +37,7 @@ class CameraDSAC(DSAC):
         est_beta: float, 
         score_nn: Callable, 
         loss_function: LossFunction, 
-        scale: Optional[float], 
+        scale: Optional[float] = None, 
         device: str = 'cpu'
     ) -> None:
         ''' CameraDSAC constructor.
@@ -118,9 +117,6 @@ class CameraDSAC(DSAC):
         Rs -- GT rotations for the first and second camera
         ts -- GT translation for the first and second camera
         '''
-        #line_dists = distance_between_projections(
-        #    point_corresponds[:, 0], point_corresponds[:, 1], 
-        #    Ks[0], Rs[0, 0], R_est, ts[0, 0], t_est[0], device=self.device)
         line_dists = distance_between_projections(
             point_corresponds[:, 0], point_corresponds[:, 1], 
             Ks, Rs[0], R_est[0], ts[0], ts[1], device=self.device)
@@ -244,7 +240,6 @@ class PoseDSAC(DSAC):
         est_beta: float,
         score_nn: Callable, 
         loss_function: LossFunction, 
-        scale: Optional[float], 
         device: str = 'cpu'
     ) -> None:
         ''' PoseDSAC constructor.
@@ -358,7 +353,6 @@ class PoseDSAC(DSAC):
             est_3d_pose_norm[THREE_KPTS[2]]
         n1 = torch.cross(c - a, b - a)
 
-        #axis = normalize(np.cross(n0, n1))
         axis = torch.cross(n0, n1) / torch.norm(torch.cross(n0, n1))
         angle = torch.acos(torch.dot(n0, n1))
 
