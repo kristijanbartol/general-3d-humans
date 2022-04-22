@@ -9,9 +9,9 @@ import numpy as np
 import itertools
 from kornia.geometry.conversions import angle_axis_to_rotation_matrix
 
-from mvn.utils.multiview import find_rotation_matrices, solve_four_solutions, \
+from multiview import find_rotation_matrices, solve_four_solutions, \
     distance_between_projections, triangulate_point_from_multiple_views_linear_torch
-from mvn.utils.vis import CONNECTIVITY_DICT, KPTS
+from const import CONNECTIVITY_DICT, KPTS
 from metrics import center_pelvis, rel_mpjpe
 from hypothesis import CameraHypothesisPool, CameraParams, HypothesisPool
 from abstract import DSAC, LossFunction

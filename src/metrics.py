@@ -1,8 +1,11 @@
+# Author: Kristijan Bartol
+
+
 from collections import OrderedDict
 import torch
 import numpy as np
 
-from mvn.utils.vis import CONNECTIVITY_DICT, SEGMENT_IDXS
+from const import CONNECTIVITY_DICT, SEGMENT_IDXS
 
 
 def mpjpe(est, gt):

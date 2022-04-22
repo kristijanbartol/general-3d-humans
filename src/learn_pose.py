@@ -12,7 +12,7 @@ from dsac import PoseDSAC
 from dataset import init_datasets
 from loss import MPJPELoss
 from score import create_pose_nn
-from mvn.utils.vis import CONNECTIVITY_DICT
+from const import CONNECTIVITY_DICT
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line

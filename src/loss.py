@@ -4,7 +4,7 @@
 import torch
 import kornia
 
-from mvn.utils.multiview import evaluate_projection, evaluate_reconstruction
+from multiview import evaluate_projection, evaluate_reconstruction
 from metrics import rel_mpjpe
 from abstract import LossFunction
 

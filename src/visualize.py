@@ -1,3 +1,6 @@
+# Author: Kristijan Bartol
+
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -7,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-from mvn.utils.vis import CONNECTIVITY_DICT
+from const import CONNECTIVITY_DICT
 
 
 JOINT_NAMES = {

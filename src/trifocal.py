@@ -1,3 +1,11 @@
+# Author: Kristijan Bartol
+
+# Adapted from:
+#
+# https://code.activestate.com/recipes/578248-trifocal-tensor-class/
+#
+
+
 import numpy as np
 import cv2
 

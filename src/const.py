@@ -1,20 +1,7 @@
-import numpy as np
-import scipy.ndimage
-import skimage.transform
-import cv2
-
-import torch
-import kornia
-
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib import pylab as plt
-from mpl_toolkits import mplot3d
-import PIL
+# Author: Kristijan Bartol
 
 
 # TODO: Create constants for 'cmu', 'human36m' strings.
-
 
 KPTS = {
     'lfoot': 0,

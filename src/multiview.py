@@ -1,3 +1,10 @@
+# Author: Kristijan Bartol
+# Mostly adapted from: 
+# 
+# https://github.com/karfly/learnable-triangulation-pytorch/blob/master/mvn/utils/multiview.py
+#
+
+
 import numpy as np
 import torch
 import kornia
@@ -5,7 +12,7 @@ import copy
 import cv2
 from scipy.spatial.transform import Rotation as R
 
-from mvn.utils.trifocal import Trifocal
+from trifocal import Trifocal
 
 #IDXS = [3, 0]
 #IDXS = [3, 1, 2]

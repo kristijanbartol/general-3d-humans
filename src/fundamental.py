@@ -1,11 +1,12 @@
+# Author: Kristijan Bartol
+
 
 import numpy as np
 import os
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline, BSpline
 
-from mvn.utils.multiview import find_rotation_matrices_numpy, \
+from multiview import find_rotation_matrices_numpy, \
     solve_four_solutions_numpy, distance_between_projections_numpy, \
     evaluate_projection_numpy, evaluate_reconstruction_numpy
 

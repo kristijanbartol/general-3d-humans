@@ -13,7 +13,7 @@ from dsac import CameraDSAC
 from dataset import init_datasets
 from loss import ReprojectionLoss3D
 from score import create_camera_nn
-from mvn.utils.vis import CONNECTIVITY_DICT
+from const import CONNECTIVITY_DICT
 from options import parse_args
 from log import log_line
 
