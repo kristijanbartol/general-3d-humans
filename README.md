@@ -28,7 +28,7 @@ We plan to completely prepare the source code with the pretrained models, demos,
 
 - [X] Instructions for training pose estimation model
 - [X] Fundamental matrix estimation algorithm
-- [ ] Refactor the source code
+- [X] Refactor the source code
 - [ ] Complete the documentation
 - [ ] Pretrained pose estimation learning model
 - [ ] Pretrained fundamental matrix estimation learning model
