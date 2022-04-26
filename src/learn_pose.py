@@ -12,14 +12,14 @@ from dsac import PoseDSAC
 from dataset import init_datasets
 from loss import MPJPELoss
 from score import create_pose_nn
-from const import CONNECTIVITY_DICT
+from const import CONNECTIVITY_DICT, PRETRAINED_PATH
 from options import parse_args
 from metrics import GlobalMetrics
 from log import log_stdout, log_line
 from visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative, \
     store_transfer_learning_metrics
-    
-    
+   
+
 if __name__ == '__main__':
     torch.manual_seed(0)
     np.random.seed(0)
@@ -94,107 +94,110 @@ if __name__ == '__main__':
     min_mean_mpjpe = 1000.
     
     for epoch_idx in range(opt.num_epochs):
-        pose_nn.train()
         log_line = ''
+        if not opt.test:
+            pose_nn.train()
 
-        print('############## TRAIN ################')
-        
-        for iteration, batch_items in enumerate(train_dataloader):
-            if iteration % opt.temp_step == 0 and iteration != 0:
-                opt.temp *= opt.temp_gamma
-                
-            # Compute DSAC on CPU for efficiency.
-            corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
+            print('############## TRAIN ################')
             
-            Ks = gt_Ks
-            Rs = gt_Rs
-            ts = gt_ts
-            
-            all_total_loss = 0
-            num_frames = est_2d.shape[0]
-
-            for fidx in range(num_frames):
-                total_loss, global_metrics, pool_metrics = \
-                    pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
-
-                all_total_loss += total_loss
-
-                if fidx % opt.pose_batch_size == 0 and fidx != 0:
-                    all_total_loss.backward()
-                    opt_pose_nn.step()
-                    opt_pose_nn.zero_grad()
-
-                    all_total_loss = 0
+            for iteration, batch_items in enumerate(train_dataloader):
+                if iteration % opt.temp_step == 0 and iteration != 0:
+                    opt.temp *= opt.temp_gamma
                     
-                log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
-
-            if opt.transfer == -1:
-                store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
-
-            store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
-            store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
-
-        print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
-        log_line += f'{epoch_idx}\t\t{global_metrics.wavg.error:.4f}\t\t'
-        global_metrics.flush()
-        
-        print('############## VALIDATION #################')
-        valid_score = 0
-        pose_nn.eval()
-
-        for iteration, batch_items in enumerate(valid_dataloader):
-            # Load sample on CPU.
-            corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
-            
-            Rs = gt_Rs
-            ts = gt_ts
-            
-            if not opt.camdsac_only:
+                # Compute DSAC on CPU for efficiency.
+                corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
+                
                 Ks = gt_Ks
+                Rs = gt_Rs
+                ts = gt_ts
+                
+                all_total_loss = 0
                 num_frames = est_2d.shape[0]
 
                 for fidx in range(num_frames):
-                    _, global_metrics, pool_metrics = \
+                    total_loss, global_metrics, pool_metrics = \
                         pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                    log_stdout('VALID', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
-                
+                    all_total_loss += total_loss
+
+                    if fidx % opt.pose_batch_size == 0 and fidx != 0:
+                        all_total_loss.backward()
+                        opt_pose_nn.step()
+                        opt_pose_nn.zero_grad()
+
+                        all_total_loss = 0
+                        
+                    log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+
                 if opt.transfer == -1:
-                    store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'valid', pool_metrics)
+                    store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+
+                store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+                store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+
+            print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
+            log_line += f'{epoch_idx}\t\t{global_metrics.wavg.error:.4f}\t\t'
+            global_metrics.flush()
             
-            store_overall_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
-            store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
+            print('############## VALIDATION #################')
+            valid_score = 0
+            pose_nn.eval()
+
+            for iteration, batch_items in enumerate(valid_dataloader):
+                # Load sample on CPU.
+                corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
+                
+                Rs = gt_Rs
+                ts = gt_ts
+                
+                if not opt.camdsac_only:
+                    Ks = gt_Ks
+                    num_frames = est_2d.shape[0]
+
+                    for fidx in range(num_frames):
+                        _, global_metrics, pool_metrics = \
+                            pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
+
+                        log_stdout('VALID', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+                    
+                    if opt.transfer == -1:
+                        store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'valid', pool_metrics)
+                
+                store_overall_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
+                store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
+                
+            print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
+            log_line += f'{global_metrics.wavg.error:.4f}\t\t'
             
-        print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
-        log_line += f'{global_metrics.wavg.error:.4f}\t\t'
-        
-        if global_metrics.wavg.error < min_mean_mpjpe:
-            min_mean_mpjpe = global_metrics.wavg.error
+            if global_metrics.wavg.error < min_mean_mpjpe:
+                min_mean_mpjpe = global_metrics.wavg.error
+                torch.save({
+                    'epoch': epoch_idx,
+                    'pose_nn_state_dict': pose_nn.state_dict(),
+                    'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
+                    }, 
+                    f'models/{session_id}_best.pt'
+                )
             torch.save({
                 'epoch': epoch_idx,
                 'pose_nn_state_dict': pose_nn.state_dict(),
                 'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
                 }, 
-                f'models/{session_id}_best.pt'
+                f'models/{session_id}_last.pt'
             )
-        torch.save({
-            'epoch': epoch_idx,
-            'pose_nn_state_dict': pose_nn.state_dict(),
-            'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
-            }, 
-            f'models/{session_id}_last.pt'
-        )
 
-        global_metrics.flush()
+            global_metrics.flush()
 
         if opt.test:
             print('########### TEST ##############')
-            test_score = 0
+            model_suffix = 'est' if opt.use_estimated else 'known'
+            pose_nn_state_dict = torch.load(PRETRAINED_PATH.format(calib=model_suffix))['pose_nn_state_dict']
+            pose_nn.load_state_dict(pose_nn_state_dict)
             pose_nn.eval()
 
+            test_score = 0
             mpjpe_scores_transfer = []
-
-            counter_verification = 0
+            
             for test_dataloader in test_dataloaders:
                 for iteration, batch_items in enumerate(test_dataloader):
                     # Load sample on CPU.

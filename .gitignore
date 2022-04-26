@@ -1,10 +1,9 @@
-pretrained/
 data/
 results/
 logs/
 models/
 vis/
-
+models/
 
 **/__pycache__/
 

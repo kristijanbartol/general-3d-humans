@@ -35,10 +35,10 @@
                 "--temp_gamma", "0.9",
 
                 "--train_iterations", "10",
-                "--valid_iterations", "1",
+                "--valid_iterations", "10",
                 //"--test_iterations", "40",
 
-                "--use_estimated",
+                //"--use_estimated",
 
                 "--pose_hypotheses", "200",
                 "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 

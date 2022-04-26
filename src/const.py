@@ -1,6 +1,8 @@
 # Author: Kristijan Bartol
 
 
+PRETRAINED_PATH = './pretrained/h36m_{calib}.pt'
+
 # TODO: Create constants for 'cmu', 'human36m' strings.
 
 KPTS = {
