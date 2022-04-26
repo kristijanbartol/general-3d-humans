@@ -50,8 +50,7 @@ docker run --rm --gpus all --name <container-name> -it \
 	-v ${BASE_DATA_DIR}/:/data/  <image-name>
 ```
 
-
-### Triangulation model training
+### Pose estimation model training
 
 To train on the base configuration (use Human3.6M for training), run:
 
@@ -78,6 +77,34 @@ python src/main.py \\
 ```
 
 A more convenient way to specify the arguments is through the .vscode/launch.json, if the VSCode IDE is used.
+
+
+### Pose estimation model evaluation
+
+Download pretrained models from [SharePoint](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/EkaiHg-8FuhDtHhL9_2vquwBdRB6JiscuEbv15tc7-HvuQ?e=PBSLl7) (password: _pretrained-3d-humans_).
+
+```
+python src/main.py \\
+	--posedsac_only \\
+	--transfer -1 \\
+	--temp 1.8 \\
+	--gumbel \\
+	--entropy_beta_cam .01 \\
+	-lr 0.0005 \\
+	-lrs 10 \\
+	-ts 5 \\
+	--temp_gamma 0.9 \\
+	--train_iterations 10 \\
+	--valid_iterations 1 \\
+	--pose_hypotheses 200 \\
+	--layers_posedsac 1000 900 900 900 900 700 \\
+	--entropy_beta_pose 0.01 \\
+	--est_beta 0.02 \\
+	--exp_beta 1. \\
+	--body_lengths_mode 2 \\ 
+	--pose_batch_size 16
+	--test
+```
 
 
 ### Relative camera pose estimation
