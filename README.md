@@ -22,15 +22,15 @@ If you use our model in your research, please reference our paper:
 }
 ```
 
-## Work-In-Progress
+## Updates / Work-In-Progress
 
 We plan to completely prepare the source code with the pretrained models, demos, and videos by mid May. The to-do list consists of:
 
-- [X] Instructions for training pose estimation model
-- [X] Fundamental matrix estimation algorithm
-- [X] Refactor the source code
+- [X] [19-04-2022] Instructions for training pose estimation model
+- [X] [19-04-2022] Fundamental matrix estimation algorithm
+- [X] [22-04-2022] Refactor the source code
 - [ ] Complete the documentation
-- [X] Pretrained pose estimation learning model
+- [X] [26-04-2022] Pretrained pose estimation learning model
 - [ ] Pretrained fundamental matrix estimation learning model
 - [ ] Demo (main) scripts to run training, inference, and evaluation
 - [ ] Video demonstration
