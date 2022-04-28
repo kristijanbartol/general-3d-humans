@@ -8,22 +8,60 @@ import numpy as np
 from const import CONNECTIVITY_DICT, SEGMENT_IDXS
 
 
-def mpjpe(est, gt):
+def mpjpe(est: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
+    '''MPJPE between the estimated and the target (GT) 3D pose.
+    
+        MPJPE is calculated as the mean Euclidean distance
+        between the corresponding points, originally defined in:        
+        "Human3.6M: Large Scale Datasets and Predictive Methods 
+        for 3D Human Sensing in Natural Environments"
+    
+        Parameters
+        ----------
+        :param est: estimated 3D pose (bsize, J, 3)
+        :param gt: ground-truth (target) 3D pose (bsize, J, 3)
+        :return: Euclidean distance between corresponding joints
+    '''
     return torch.mean(torch.norm(est - gt, p=2, dim=1))
 
 
-def center_pelvis(pose_3d):
+def center_pelvis(pose_3d: torch.Tensor) -> torch.Tensor:
+    '''Move the 3D pose to the origin (pelvis-wise).
+    
+        In case of H36M joint set, the pelvis is at index 6.
+        In case of CMU joint set, the pelvis is at index 2.
+        
+        Parameters
+        ----------
+        :param pose_3d: 3D pose (bsize, J, 3)
+        :return: centered 3D pose
+    '''
     if pose_3d.shape[0] == 17:
         return pose_3d - pose_3d[6, :]
     else:
         return pose_3d - pose_3d[2, :]
 
 
-def rel_mpjpe(est, gt):
-    est_centered = center_pelvis(est)
-    gt_centered = center_pelvis(gt)
+def rel_mpjpe(est: torch.Tensor, 
+              gt: torch.Tensor, 
+              device: str = 'cpu'
+    ) -> torch.Tensor:
+    '''Relative MPJPE.
+    
+        Calculated by first translating estimation and target
+        to origin and calculating MPJPE score
+        
+        Parameters
+        ----------
+        :param est: estimated 3D pose (bsize, J, 3)
+        :param gt: ground-truth (target) 3D pose (bsize, J, 3)
+        :param device: cuda or cpu
+        :return: MPJPE score between the prediction and target (bsize,)
+    '''
+    est_centered = center_pelvis(est, device)
+    gt_centered = center_pelvis(gt, device)
 
-    return mpjpe(est_centered, gt_centered)
+    return mpjpe(est_centered, gt_centered, device)
 
 
 class RatioVariances():

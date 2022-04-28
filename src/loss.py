@@ -14,15 +14,23 @@ def cross_entropy_loss(est, gt):
 
 
 class QuaternionLoss(LossFunction):
-    '''
-    Calculate loss based on the difference between the rotations (in quaternions).
+    '''Calculate loss based on the difference between the rotations (in quaternions).
+    
+        The difference between the quaternions is simply a 1-norm 
+        (absolute difference) between the values.
     '''
 
-    def __call__(self, R_est: torch.Tensor, R_gt: torch.Tensor):
+    def __call__(self, 
+                 R_est: torch.Tensor, 
+                 R_gt: torch.Tensor
+        ) -> torch.Tensor:
         '''Calculate the rotation loss by converting rot->quat.
 
-        R_est -- estimated line, form: [intercept, slope]
-        R_gt -- ground truth line, form: [intercept, slope]
+            Parameters
+            ----------
+            :param R_est: estimated line, form: [intercept, slope]
+            :param R_gt: ground truth line, form: [intercept, slope]
+            :return: absolute (1-norm) difference between the rotation quaternions
         '''
         quat_est = kornia.rotation_matrix_to_quaternion(R_est)
         quat_gt = kornia.rotation_matrix_to_quaternion(R_gt)
@@ -38,14 +46,23 @@ class ReprojectionLoss3D(LossFunction):
     def __init__(self, device='cpu'):
         self.device = device
 
-    def __call__(self, R_est, gt_Ks, gt_Rs, gt_ts, points_3d):
+    def __call__(self, 
+                 R_est: torch.Tensor, 
+                 gt_Ks: torch.Tensor, 
+                 gt_Rs: torch.Tensor, 
+                 gt_ts: torch.Tensor, 
+                 points_3d
+        ) -> torch.Tensor:
         '''Calculate the rotation loss by converting rot->quat.
 
-        R_est -- estimated line, form: [intercept, slope]
-        gt_Ks -- GT intrinsics for the 2 cameras
-        gt_Rs -- GT rotations for the 2 cameras
-        gt_ts -- GT translations for the 2 cameras
-        points_3d -- 3D points used for reprojection (could be any random set!)
+            Parameters
+            ----------
+            :param R_est: estimated line, form: [intercept, slope]
+            :param gt_Ks: GT intrinsics for the 2 cameras
+            :param gt_Rs: GT rotations for the 2 cameras
+            :param gt_ts: GT translations for the 2 cameras
+            :param points_3d: 3D points used for reprojection (could be any random set!)
+            :return: 3D error (scalar)
         '''
         # TODO: Evaluating only rotation for now.
         kpts_2d_projs, _ = evaluate_projection(
@@ -57,22 +74,28 @@ class ReprojectionLoss3D(LossFunction):
 
 
 class MPJPELoss(LossFunction):
-    '''Calculate MPJPE loss.
+    '''Calculate MPJPE (mean per-joint position error) loss.
     
+        The metric is defined in "Human3.6M: Large Scale Datasets 
+        and Predictive Methods for 3D Human Sensing in Natural Environments".
     '''
 
-    def __init__(self, device='cpu'):
+    def __init__(self, 
+                 device: str = 'cpu'
+        ) -> None:
+        '''MPJPE loss constructor.
+        
+        '''
         self.device = device
 
-    def __call__(self, est_3d, gt_3d):
+    def __call__(self, 
+                 est_3d: torch.Tensor, 
+                 gt_3d: torch.Tensor
+        ) -> torch.Tensor:
         '''Calculate MPJPE loss between two 3D poses.
 
-        est_3d -- triangulated 3D pose
-        gt_3d -- GT 3D pose
+        :param est_3d: estimated 3D pose (bsize, J, 3)
+        :param gt_3d: ground-truth 3D pose (bsize, J, 3)
+        :return: relative MPJPE (bsize,)
         '''
-        '''
-        est_3d_centered = est_3d - est_3d[6, :]
-        gt_3d_centered = gt_3d - gt_3d[6, :]
-        return torch.mean(torch.norm(est_3d_centered - gt_3d_centered, p=2, dim=1))
-        '''
-        return rel_mpjpe(est_3d, gt_3d)
+        return rel_mpjpe(est_3d, gt_3d, device=self.device)
