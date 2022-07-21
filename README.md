@@ -6,8 +6,7 @@ This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triang
 The repository will soon contain the complete instructions and demos for training and inference of
 the models. 
 
-**NOTE:** There is still a bit more work to do to make scripts more user-friendly. I apologize for that - feel free to reach
-out if you encounter any issues!
+**NOTE:** The demo where you could put your own keypoint detections / images and produce 3D poses on any data will be ready next week (29th July).
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
@@ -34,9 +33,10 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [X] [22-04-2022] Refactor the source code
 - [ ] Complete the documentation
 - [X] [26-04-2022] Pretrained pose estimation learning model
-- [ ] Pretrained fundamental matrix estimation learning model
+- [X] [26-04-2022] Demo to obtain camera parameters from multi-frame keypoints (`src/fundamental.py`)
+- [ ] **Demo to obtain 3D poses from arbitrary image sequence (uncalibrated)**
 - [X] [28-04-2022] Instructions for running inference
-- [X] Demo (main) scripts to run training and evaluation
+- [X] [21-07-2022] Training and evaluation functions
 - [ ] Project page
 
 ## Usage
@@ -64,28 +64,10 @@ But we already prepared some training/evaluation [data](https://ferhr-my.sharepo
 To train on the base configuration (use Human3.6M for training), run:
 
 ```
-python main.py \
-	--posedsac_only \
-	--transfer -1 \
-	--temp 1.8 \
-	--gumbel \
-	--entropy_beta_cam .01 \
-	-lr 0.0005 \
-	-lrs 10 \
-	-ts 5 \
-	--temp_gamma 0.9 \
-	--train_iterations 10 \
-	--valid_iterations 1 \
-	--pose_hypotheses 200 \
-	--layers_posedsac 1000 900 900 900 900 700 \
-	--entropy_beta_pose 0.01 \
-	--est_beta 0.02 \
-	--exp_beta 1. \
-	--body_lengths_mode 2 \
-	--pose_batch_size 16
+python main.py
 ```
 
-A more convenient way to specify the arguments is through the .vscode/launch.json, if the VSCode IDE is used.
+A more convenient way to specify the arguments is through the .vscode/launch.json, if the VSCode IDE is used. All the options are available in `src/options.py`.
 
 
 ### Pose estimation model evaluation
@@ -93,26 +75,7 @@ A more convenient way to specify the arguments is through the .vscode/launch.jso
 Download pretrained models from [SharePoint](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/EkaiHg-8FuhDtHhL9_2vquwBdRB6JiscuEbv15tc7-HvuQ?e=PBSLl7) (password: _pretrained-3d-humans_).
 
 ```
-python main.py \
-	--posedsac_only \
-	--transfer -1 \
-	--temp 1.8 \
-	--gumbel \
-	--entropy_beta_cam .01 \
-	-lr 0.0005 \
-	-lrs 10 \
-	-ts 5 \
-	--temp_gamma 0.9 \
-	--train_iterations 10 \
-	--valid_iterations 1 \
-	--pose_hypotheses 200 \
-	--layers_posedsac 1000 900 900 900 900 700 \
-	--entropy_beta_pose 0.01 \
-	--est_beta 0.02 \
-	--exp_beta 1. \
-	--body_lengths_mode 2 \
-	--pose_batch_size 16 \
-	--test
+python main.py --run_mode eval
 ```
 
 
