@@ -17,8 +17,8 @@ from src.const import CONNECTIVITY_DICT, PRETRAINED_PATH
 from src.options import parse_args
 from src.metrics import GlobalMetrics
 from src.log import log_stdout
-   
-   
+
+
 def run(opt: Namespace, session_id: str) -> None:
     (pose_dsac, 
      score_nn, 
@@ -28,7 +28,7 @@ def run(opt: Namespace, session_id: str) -> None:
      mean, 
      std) = _prepare(opt)
     
-    if opt.test:
+    if opt.run_mode == 'eval':
         _test(
             options=opt, 
             dsac_model=pose_dsac,
@@ -162,7 +162,7 @@ def _train(
 
                 all_total_loss += total_loss
 
-                if fidx % options.pose_batch_size == 0 and fidx != 0:
+                if fidx % options.batch_size == 0 and fidx != 0:
                     all_total_loss.backward()
                     optimizer.step()
                     optimizer.zero_grad()

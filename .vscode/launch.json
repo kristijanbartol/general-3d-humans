@@ -11,45 +11,27 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--posedsac_only",
-                //"--camdsac_only",
-
-                "--transfer", "2",
-
-                //"--dataset", "cmu",
-                //"--cam_idxs", "1", "2", "3", "4", "6", "7", //"10", "12", "16", "18", "19", "22", "23", "30",
-                //"--cam_idxs", "0", "5", "8", "9", "10", "11", //"10", "12", "16", "18", "19", "22", "23", "30",
-
-                //"--dataset", "human36m",
-                "--cam_idxs", "1", "2",       // now used only for CamDSAC
-
-                "--layers_camdsac", "700", "500", "300", "300",
-
-                "--temp", "1.8",
-                "--gumbel",
-                "--entropy_beta_cam", ".01",
-                //"--entropy_to_scores",
-                "-lr", "0.0005",
-                "-lrs", "10",
-                "-ts", "5",
-                "--temp_gamma", "0.9",
-
-                "--train_iterations", "10",
-                "--valid_iterations", "10",
-                //"--test_iterations", "40",
-
-                //"--use_estimated",
-
-                "--pose_hypotheses", "200",
-                "--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
-                "--entropy_beta_pose", "0.01",
-                "--est_beta", "0.02",
-                "--exp_beta", "1.",
-                "--body_lengths_mode", "2",
-                "--pose_batch_size", "16",
-                //"--weighted_selection"
-
-                "--test",
+                //"--transfer", "-1",
+                //"--temp", "1.8",
+                //"--gumbel",
+                //"--entropy_beta_cam", ".01",
+                ////"--entropy_to_scores",
+                //"-lr", "0.0005",
+                //"-lrs", "10",
+                //"-ts", "5",
+                //"--temp_gamma", "0.9",
+                //"--train_iterations", "10",
+                //"--valid_iterations", "10",
+                ////"--use_estimated",
+                //"--pose_hypotheses", "200",
+                //"--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
+                //"--entropy_beta_pose", "0.01",
+                //"--est_beta", "0.02",
+                //"--exp_beta", "1.",
+                //"--body_lengths_mode", "2",
+                //"--batch_size", "16",
+                ////"--weighted_selection",
+                //"--run_mode", "eval"
             ]
         }
     ]

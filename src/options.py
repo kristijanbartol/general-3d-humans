@@ -25,7 +25,7 @@ def parse_args() -> Tuple[Namespace, str]:
     parser.add_argument('--layers_camdsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
         help='number of neurons per layer')
 
-    parser.add_argument('--layers_posedsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
+    parser.add_argument('--layers_posedsac', type=int, nargs='+', default=[1000, 900, 900, 900, 900, 700],
         help='number of neurons per layer')
 
     parser.add_argument('--cam_idxs', type=int, nargs='+', default=[0, 1, 2, 3])
@@ -45,13 +45,13 @@ def parse_args() -> Tuple[Namespace, str]:
     parser.add_argument('--num_frames', type=int, default=50,
         help='number of frames used for camera autocalibration in each iteration')
 
-    parser.add_argument('--train_iterations', type=int, default=50,
+    parser.add_argument('--train_iterations', type=int, default=10,
         help='number of training iterations per epoch (= dataset length)')
 
-    parser.add_argument('--valid_iterations', type=int, default=50,
+    parser.add_argument('--valid_iterations', type=int, default=10,
         help='number of training iterations per epoch (= dataset length)')
 
-    parser.add_argument('--num_epochs', '-e', type=int, default=100,
+    parser.add_argument('--num_epochs', '-e', type=int, default=2,
         help='number of epochs (= num of validations)')
 
     parser.add_argument('--inlier_threshold', '-it', type=float, default=1.,
@@ -66,53 +66,41 @@ def parse_args() -> Tuple[Namespace, str]:
     parser.add_argument('--est_beta', type=float, default=0.05,
         help='the coeficient next to error estimation loss component')
 
-    parser.add_argument('--temp', '-t', type=float, default=1.,
+    parser.add_argument('--temp', '-t', type=float, default=1.8,
         help='softmax temperature regulating how close the distribution is to categorical')
 
-    parser.add_argument('--entropy_beta_cam', '-ebc', type=float, default=1.,
+    parser.add_argument('--entropy_beta_cam', '-ebc', type=float, default=.01,
         help='entropy coeficient (the more, the stronger the regularization)')
 
     parser.add_argument('--entropy_beta_pose', '-ebp', type=float, default=1.,
         help='entropy coeficient (the more, the stronger the regularization)')
 
-    parser.add_argument('--learning_rate', '-lr', type=float, default=0.0001, help='learning rate')
+    parser.add_argument('--learning_rate', '-lr', type=float, default=0.0005, help='learning rate')
 
-    parser.add_argument('--lr_step', '-lrs', type=int, default=100,
+    parser.add_argument('--lr_step', '-lrs', type=int, default=10,
         help='cut learning rate in half each x iterations')
 
     parser.add_argument('--lr_gamma', '-lrg', type=float, default=0.5,
         help='learning rate decay factor')
 
-    parser.add_argument('--temp_step', '-ts', type=int, default=30,
+    parser.add_argument('--temp_step', '-ts', type=int, default=5,
         help='cut learning rate in half each x iterations')
 
-    parser.add_argument('--temp_gamma', '-tg', type=float, default=0.8,
+    parser.add_argument('--temp_gamma', '-tg', type=float, default=0.9,
         help='rate of temperature decrease')
 
-    parser.add_argument('--lrstepoffset', '-lro', type=int, default=30000,
-        help='keep initial learning rate for at least x iterations')
-
-    parser.add_argument('--storeinterval', '-si', type=int, default=1000,
-        help='store network weights and a prediction vizualisation every x training iterations')
-
-    parser.add_argument('--body_lengths_mode', type=int, default=0,
+    parser.add_argument('--body_lengths_mode', type=int, default=2,
         help='0 - use keypoints only, 1 - along with body lengths, 2 - body lengths only')
 
     parser.add_argument('--transfer', type=int, default=-1,
         help='use transfer learning and in which mode (-1 no transfer, otherswise pick base camera set')
 
-    parser.add_argument('--pose_batch_size', type=int, default=16,
+    parser.add_argument('--batch_size', type=int, default=16,
         help='number of frames after which the gradients are applied')
-
-    parser.add_argument('--posedsac_only', dest='posedsac_only', action='store_true')
-
-    parser.add_argument('--camdsac_only', dest='camdsac_only', action='store_true')
 
     parser.add_argument('--gumbel', dest='gumbel', action='store_true')
 
     parser.add_argument('--hard', dest='hard', action='store_true')
-
-    parser.add_argument('--use_body_lengths', dest='use_body_lengths', action='store_true')
 
     parser.add_argument('--use_estimated', dest='use_estimated', action='store_true')
 
@@ -124,15 +112,10 @@ def parse_args() -> Tuple[Namespace, str]:
     parser.add_argument('--weighted_selection', dest='weighted_selection', action='store_true',
         help='weighted selection (regression) instead of probabilistic selection (generative)')
 
-    parser.add_argument('--test', dest='test', action='store_true',
+    parser.add_argument('--run_mode', type=str, choices=['train', 'eval', 'infer'], default='train',
         help='whether to test on test set')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')
-
-    parser.add_argument('--debug', dest='debug', action='store_true')
-
-    parser.add_argument('--session', '-sid', default='',
-        help='custom session name appended to output files. Useful to separate different runs of the program')
 
     opt = parser.parse_args()
 
@@ -148,7 +131,6 @@ def parse_args() -> Tuple[Namespace, str]:
             opt.dataset = 'cmu'
     else:
         opt.dataset = 'human36m'
-        if opt.posedsac_only:
-            opt.cam_idxs = TRANSFER_CAM_SETS[4]     # [0, 1, 2, 3]
+        opt.cam_idxs = TRANSFER_CAM_SETS[4]     # [0, 1, 2, 3]
 
     return opt, session_id
