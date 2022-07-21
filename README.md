@@ -4,7 +4,10 @@
 
 This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280).
 The repository will soon contain the complete instructions and demos for training and inference of
-the models. The materials should be complete by **mid May**.
+the models. 
+
+**NOTE:** There is still a bit more work to do to make scripts more user-friendly. I apologize for that - feel free to reach
+out if you encounter any issues!
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
@@ -33,8 +36,8 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [X] [26-04-2022] Pretrained pose estimation learning model
 - [ ] Pretrained fundamental matrix estimation learning model
 - [X] [28-04-2022] Instructions for running inference
-- [ ] Demo (main) scripts to run training, inference, and evaluation
-- [ ] Video demonstration
+- [X] Demo (main) scripts to run training and evaluation
+- [ ] Project page
 
 ## Usage
 
@@ -61,24 +64,24 @@ But we already prepared some training/evaluation [data](https://ferhr-my.sharepo
 To train on the base configuration (use Human3.6M for training), run:
 
 ```
-python src/main.py \\
-	--posedsac_only \\
-	--transfer -1 \\
-	--temp 1.8 \\
-	--gumbel \\
-	--entropy_beta_cam .01 \\
-	-lr 0.0005 \\
-	-lrs 10 \\
-	-ts 5 \\
-	--temp_gamma 0.9 \\
-	--train_iterations 10 \\
-	--valid_iterations 1 \\
-	--pose_hypotheses 200 \\
-	--layers_posedsac 1000 900 900 900 900 700 \\
-	--entropy_beta_pose 0.01 \\
-	--est_beta 0.02 \\
-	--exp_beta 1. \\
-	--body_lengths_mode 2 \\ 
+python src/learn_pose.py \
+	--posedsac_only \
+	--transfer -1 \
+	--temp 1.8 \
+	--gumbel \
+	--entropy_beta_cam .01 \
+	-lr 0.0005 \
+	-lrs 10 \
+	-ts 5 \
+	--temp_gamma 0.9 \
+	--train_iterations 10 \
+	--valid_iterations 1 \
+	--pose_hypotheses 200 \
+	--layers_posedsac 1000 900 900 900 900 700 \
+	--entropy_beta_pose 0.01 \
+	--est_beta 0.02 \
+	--exp_beta 1. \
+	--body_lengths_mode 2 \
 	--pose_batch_size 16
 ```
 
@@ -90,25 +93,25 @@ A more convenient way to specify the arguments is through the .vscode/launch.jso
 Download pretrained models from [SharePoint](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/EkaiHg-8FuhDtHhL9_2vquwBdRB6JiscuEbv15tc7-HvuQ?e=PBSLl7) (password: _pretrained-3d-humans_).
 
 ```
-python src/main.py \\
-	--posedsac_only \\
-	--transfer -1 \\
-	--temp 1.8 \\
-	--gumbel \\
-	--entropy_beta_cam .01 \\
-	-lr 0.0005 \\
-	-lrs 10 \\
-	-ts 5 \\
-	--temp_gamma 0.9 \\
-	--train_iterations 10 \\
-	--valid_iterations 1 \\
-	--pose_hypotheses 200 \\
-	--layers_posedsac 1000 900 900 900 900 700 \\
-	--entropy_beta_pose 0.01 \\
-	--est_beta 0.02 \\
-	--exp_beta 1. \\
-	--body_lengths_mode 2 \\ 
-	--pose_batch_size 16
+python src/learn_pose.py \
+	--posedsac_only \
+	--transfer -1 \
+	--temp 1.8 \
+	--gumbel \
+	--entropy_beta_cam .01 \
+	-lr 0.0005 \
+	-lrs 10 \
+	-ts 5 \
+	--temp_gamma 0.9 \
+	--train_iterations 10 \
+	--valid_iterations 1 \
+	--pose_hypotheses 200 \
+	--layers_posedsac 1000 900 900 900 900 700 \
+	--entropy_beta_pose 0.01 \
+	--est_beta 0.02 \
+	--exp_beta 1. \
+	--body_lengths_mode 2 \
+	--pose_batch_size 16 \
 	--test
 ```
 
