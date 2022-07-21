@@ -3,11 +3,9 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.nn import Sequential
-import os
 import numpy as np
 import sys
 from argparse import Namespace
-from src.abstract import DSAC
 
 sys.path.append('/general-3d-humans/')
 from src.metrics import GlobalMetrics
@@ -19,11 +17,42 @@ from src.const import CONNECTIVITY_DICT, PRETRAINED_PATH
 from src.options import parse_args
 from src.metrics import GlobalMetrics
 from src.log import log_stdout
-from src.visualize import store_overall_metrics, store_pose_prior_metrics, \
-    store_qualitative, store_transfer_learning_metrics, store_hypotheses
    
-
+   
 def run(opt: Namespace, session_id: str) -> None:
+    (pose_dsac, 
+     score_nn, 
+     optimizer, 
+     dataloaders, 
+     global_metrics, 
+     mean, 
+     std) = _prepare(opt)
+    
+    if opt.test:
+        _test(
+            options=opt, 
+            dsac_model=pose_dsac,
+            score_nn=score_nn,
+            test_dataloaders=dataloaders['test'],
+            global_metrics=global_metrics,
+            mean=mean,
+            std=std)
+    else:
+        _train(
+            options=opt, 
+            session_id=session_id,
+            dsac_model=pose_dsac,
+            score_nn=score_nn,
+            optimizer=optimizer,
+            train_dataloader=dataloaders['train'],
+            valid_dataloader=dataloaders['valid'],
+            global_metrics=global_metrics,
+            mean=mean,
+            std=std
+        )   
+
+   
+def _prepare(opt: Namespace):
     # Create datasets.
     train_set, valid_set, test_sets = init_datasets(opt)
 
@@ -48,11 +77,8 @@ def run(opt: Namespace, session_id: str) -> None:
     
     # Set model for optimization (training).
     if not opt.cpu: score_nn = score_nn.cuda()
-    opt_pose_nn = optim.Adam(
+    optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, score_nn.parameters()), lr=opt.learning_rate)
-    
-    # Set debugging mode.
-    if opt.debug: torch.autograd.set_detect_anomaly(True)
     
     # Create "pose DSAC" (referencing "DSAC - Differentiable RANSAC for Camera Localization").
     pose_dsac = PoseDSAC(
@@ -78,33 +104,17 @@ def run(opt: Namespace, session_id: str) -> None:
                             num_workers=0, batch_size=None)
     test_dataloaders = [DataLoader(x, shuffle=False,
                             num_workers=0, batch_size=None) for x in test_sets]
+    
+    dataloaders = {
+        'train': train_dataloader,
+        'valid': valid_dataloader,
+        'test': test_dataloaders
+    }
 
     # Initialize global metrics.
     global_metrics = GlobalMetrics(opt.dataset)
     
-    if opt.test:
-        _test(
-            options=opt, 
-            session_id=session_id,
-            dsac_model=pose_dsac,
-            score_nn=score_nn,
-            test_dataloaders=test_dataloaders,
-            global_metrics=global_metrics,
-            mean=mean_3d,
-            std=std_3d)
-    else:
-        _train(
-            options=opt, 
-            session_id=session_id,
-            dsac_model=pose_dsac,
-            score_nn=score_nn,
-            optimizer=opt_pose_nn,
-            train_dataloader=train_dataloader,
-            valid_dataloader=valid_dataloader,
-            global_metrics=global_metrics,
-            mean=mean_3d,
-            std=std_3d
-        )
+    return pose_dsac, score_nn, optimizer, dataloaders, global_metrics, mean_3d, std_3d
 
 
 def _train(
@@ -125,7 +135,6 @@ def _train(
         score_nn.train()
 
         print('############## TRAIN ################')
-        
         for iteration, batch_items in enumerate(train_dataloader):
             if iteration % options.temp_step == 0 and iteration != 0:
                 options.temp *= options.temp_gamma
@@ -170,34 +179,6 @@ def _train(
                     pool_metrics=pool_metrics, 
                     detailed=options.detailed_logs)
 
-            if options.transfer == -1:
-                store_qualitative(
-                    session_id=session_id, 
-                    epoch_idx=epoch_idx, 
-                    iteration=iteration, 
-                    dataset=options.dataset, 
-                    data_type='train', 
-                    pool_metrics=pool_metrics)
-                store_hypotheses(
-                    epoch_idx=epoch_idx, 
-                    iteration=iteration, 
-                    dataset=options.dataset, 
-                    data_type='train', 
-                    pool_metrics=pool_metrics)
-
-            store_pose_prior_metrics(
-                session_id=session_id, 
-                epoch_idx=epoch_idx, 
-                dataset=options.dataset, 
-                data_type='train', 
-                global_metrics=global_metrics)
-            store_overall_metrics(
-                session_id=session_id, 
-                epoch_idx=epoch_idx, 
-                dataset=options.dataset, 
-                data_type='train', 
-                global_metrics=global_metrics)
-
         print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
         global_metrics.flush()
         
@@ -235,28 +216,6 @@ def _train(
                     pool_metrics=pool_metrics,
                     detailed=options.detailed_logs)
             
-            if options.transfer == -1:
-                store_qualitative(
-                    session_id=session_id, 
-                    epoch_idx=epoch_idx, 
-                    iteration=iteration, 
-                    dataset=options.dataset, 
-                    dat_type='valid', 
-                    pool_metrics=pool_metrics)
-            
-            store_overall_metrics(
-                session_id=session_id, 
-                epoch_idx=epoch_idx, 
-                dataset=options.dataset, 
-                data_type='valid', 
-                global_metrics=global_metrics)
-            store_pose_prior_metrics(
-                session_id=session_id, 
-                epoch_idx=epoch_idx, 
-                dataset=options.dataset, 
-                data_type='valid', 
-                global_metrics=global_metrics)
-            
         print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
         
         if global_metrics.wavg.error < min_mean_mpjpe:
@@ -281,7 +240,6 @@ def _train(
 
 def _test(
         options: Namespace, 
-        session_id: str,
         dsac_model: PoseDSAC,
         score_nn: Sequential,
         test_dataloaders: DataLoader,
@@ -311,7 +269,7 @@ def _test(
 
             for fidx in range(num_frames):
                 _, global_metrics, pool_metrics = dsac_model(
-                    std_2d_pose=est_2d[fidx], 
+                    est_2d_pose=est_2d[fidx], 
                     Ks=Ks, 
                     Rs=Rs, 
                     ts=ts, 
@@ -329,39 +287,15 @@ def _test(
                     global_metrics=global_metrics, 
                     pool_metrics=pool_metrics,
                     detailed=options.detailed_logs)
-
-            if opt.transfer == -1:
-                store_qualitative(
-                    session_id=session_id, 
-                    epoch_idx=0, 
-                    iteration=iteration, 
-                    dataset=opt.dataset, 
-                    data_type='test', 
-                    poo_metrics=pool_metrics)
-
-            store_overall_metrics(
-                session_id=session_id, 
-                epoch_idx=0, 
-                dataset=opt.dataset, 
-                data_type='test', 
-                global_metrics=global_metrics)
-            store_pose_prior_metrics(
-                session_id=session_id, 
-                epoch_idx=0, 
-                dataset=opt.dataset, 
-                data_type='test', 
-                global_metrics=global_metrics)
         
         print(f'Test finished. Mean MPJPE: {global_metrics.wavg.error}')
 
         mpjpe_scores_transfer.append(global_metrics.wavg.error)
         global_metrics.flush()
-
-    if opt.transfer != -1:
-        store_transfer_learning_metrics(
-            session_id=session_id, 
-            epoch_idx=0, 
-            errors=mpjpe_scores_transfer)
+        
+        
+def infer():
+    pass
 
 
 if __name__ == '__main__':

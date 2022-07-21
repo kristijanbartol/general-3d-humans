@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from src.options import parse_args
-from src.learn_pose import run
+from src.run_pose import run
 
 
 if __name__ == '__main__':

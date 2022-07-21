@@ -49,7 +49,7 @@
                 "--pose_batch_size", "16",
                 //"--weighted_selection"
 
-                //"--test",
+                "--test",
             ]
         }
     ]
