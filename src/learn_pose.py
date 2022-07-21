@@ -2,9 +2,12 @@
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.nn import Sequential
 import os
 import numpy as np
 import sys
+from argparse import Namespace
+from src.abstract import DSAC
 
 sys.path.append('/general-3d-humans/')
 from src.metrics import GlobalMetrics
@@ -16,16 +19,11 @@ from src.const import CONNECTIVITY_DICT, PRETRAINED_PATH
 from src.options import parse_args
 from src.metrics import GlobalMetrics
 from src.log import log_stdout
-from src.visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative, \
-    store_transfer_learning_metrics, store_hypotheses
+from src.visualize import store_overall_metrics, store_pose_prior_metrics, \
+    store_qualitative, store_transfer_learning_metrics, store_hypotheses
    
 
-def run_pose(opt, session_id, hyperparams_string):
-    # Keep track of learning progress.
-    logger = open(os.path.join('logs', f'{session_id}.txt'), 'w', 1)
-    logger.write(f'{hyperparams_string}\n\n')
-    logger.write('Iter\tTrain\t\tValid\t\tTest\t\tBaseline\n')
-
+def run(opt: Namespace, session_id: str) -> None:
     # Create datasets.
     train_set, valid_set, test_sets = init_datasets(opt)
 
@@ -44,15 +42,14 @@ def run_pose(opt, session_id, hyperparams_string):
     elif opt.body_lengths_mode == 2:
         pose_input_size = num_body_parts
 
-    pose_nn = create_pose_nn(input_size=pose_input_size, hidden_layer_sizes=opt.layers_posedsac)
+    score_nn = create_pose_nn(
+        input_size=pose_input_size, 
+        hidden_layer_sizes=opt.layers_posedsac)
     
     # Set model for optimization (training).
-    if not opt.cpu: pose_nn = pose_nn.cuda()
+    if not opt.cpu: score_nn = score_nn.cuda()
     opt_pose_nn = optim.Adam(
-        filter(lambda p: p.requires_grad, pose_nn.parameters()), lr=opt.learning_rate)
-
-    # Create learning rate scheduler.
-    lrs_pose_nn = optim.lr_scheduler.StepLR(opt_pose_nn, opt.lr_step, gamma=opt.lr_gamma)
+        filter(lambda p: p.requires_grad, score_nn.parameters()), lr=opt.learning_rate)
     
     # Set debugging mode.
     if opt.debug: torch.autograd.set_detect_anomaly(True)
@@ -70,7 +67,7 @@ def run_pose(opt, session_id, hyperparams_string):
         weighted_selection=opt.weighted_selection, 
         exp_beta=opt.exp_beta, 
         est_beta=opt.est_beta, 
-        score_nn=pose_nn, 
+        score_nn=score_nn, 
         loss_function=pose_loss
     )
     
@@ -85,236 +82,292 @@ def run_pose(opt, session_id, hyperparams_string):
     # Initialize global metrics.
     global_metrics = GlobalMetrics(opt.dataset)
     
-    # Initialize large "min" mean MPJPE for storing the best torch models.
+    if opt.test:
+        _test(
+            options=opt, 
+            session_id=session_id,
+            dsac_model=pose_dsac,
+            score_nn=score_nn,
+            test_dataloaders=test_dataloaders,
+            global_metrics=global_metrics,
+            mean=mean_3d,
+            std=std_3d)
+    else:
+        _train(
+            options=opt, 
+            session_id=session_id,
+            dsac_model=pose_dsac,
+            score_nn=score_nn,
+            optimizer=opt_pose_nn,
+            train_dataloader=train_dataloader,
+            valid_dataloader=valid_dataloader,
+            global_metrics=global_metrics,
+            mean=mean_3d,
+            std=std_3d
+        )
+
+
+def _train(
+        options: Namespace, 
+        session_id: str, 
+        dsac_model: PoseDSAC, 
+        score_nn: Sequential, 
+        optimizer: optim.Adam,
+        train_dataloader: DataLoader, 
+        valid_dataloader: DataLoader, 
+        global_metrics: GlobalMetrics, 
+        mean: np.ndarray, 
+        std: np.ndarray
+    ) -> None:
     min_mean_mpjpe = 1000.
     
-    for epoch_idx in range(opt.num_epochs):
-        log_line = ''
-        if not opt.test:
-            pose_nn.train()
+    for epoch_idx in range(options.num_epochs):
+        score_nn.train()
 
-            print('############## TRAIN ################')
+        print('############## TRAIN ################')
+        
+        for iteration, batch_items in enumerate(train_dataloader):
+            if iteration % options.temp_step == 0 and iteration != 0:
+                options.temp *= options.temp_gamma
+                
+            # Compute DSAC on CPU for efficiency.
+            _, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
             
-            for iteration, batch_items in enumerate(train_dataloader):
-                if iteration % opt.temp_step == 0 and iteration != 0:
-                    opt.temp *= opt.temp_gamma
+            Ks = gt_Ks
+            Rs = gt_Rs
+            ts = gt_ts
+            
+            all_total_loss = 0
+            num_frames = est_2d.shape[0]
+
+            for fidx in range(num_frames):
+                total_loss, global_metrics, pool_metrics = dsac_model(
+                    est_2d_pose=est_2d[fidx], 
+                    Ks=Ks, 
+                    Rs=Rs, 
+                    ts=ts, 
+                    gt_3d=gt_3d[fidx], 
+                    mean=mean, 
+                    std=std, 
+                    metrics=global_metrics)
+
+                all_total_loss += total_loss
+
+                if fidx % options.pose_batch_size == 0 and fidx != 0:
+                    all_total_loss.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+                    all_total_loss = 0
                     
-                # Compute DSAC on CPU for efficiency.
-                corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
-                
-                Ks = gt_Ks
-                Rs = gt_Rs
-                ts = gt_ts
-                
-                all_total_loss = 0
-                num_frames = est_2d.shape[0]
+                log_stdout(
+                    dataset='TRAIN', 
+                    epoch_idx=epoch_idx, 
+                    iteration=iteration, 
+                    fidx=fidx, 
+                    num_frames=num_frames, 
+                    global_metrics=global_metrics, 
+                    pool_metrics=pool_metrics, 
+                    detailed=options.detailed_logs)
 
-                for fidx in range(num_frames):
-                    total_loss, global_metrics, pool_metrics = \
-                        pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
-
-                    all_total_loss += total_loss
-
-                    if fidx % opt.pose_batch_size == 0 and fidx != 0:
-                        all_total_loss.backward()
-                        opt_pose_nn.step()
-                        opt_pose_nn.zero_grad()
-
-                        all_total_loss = 0
-                        
-                    log_stdout(
-                        dataset='TRAIN', 
-                        epoch_idx=epoch_idx, 
-                        iteration=iteration, 
-                        fidx=fidx, 
-                        num_frames=num_frames, 
-                        global_metrics=global_metrics, 
-                        pool_metrics=pool_metrics, 
-                        detailed=opt.detailed_logs)
-
-                if opt.transfer == -1:
-                    store_qualitative(
-                        session_id=session_id, 
-                        epoch_idx=epoch_idx, 
-                        iteration=iteration, 
-                        dataset=opt.dataset, 
-                        data_type='train', 
-                        pool_metrics=pool_metrics)
-                    store_hypotheses(
-                        epoch_idx=epoch_idx, 
-                        iteration=iteration, 
-                        dataset=opt.dataset, 
-                        data_type='train', 
-                        pool_metrics=pool_metrics)
-
-                store_pose_prior_metrics(
+            if options.transfer == -1:
+                store_qualitative(
                     session_id=session_id, 
                     epoch_idx=epoch_idx, 
-                    dataset=opt.dataset, 
+                    iteration=iteration, 
+                    dataset=options.dataset, 
                     data_type='train', 
-                    global_metrics=global_metrics)
-                store_overall_metrics(
-                    session_id=session_id, 
+                    pool_metrics=pool_metrics)
+                store_hypotheses(
                     epoch_idx=epoch_idx, 
-                    dataset=opt.dataset, 
+                    iteration=iteration, 
+                    dataset=options.dataset, 
                     data_type='train', 
-                    global_metrics=global_metrics)
+                    pool_metrics=pool_metrics)
 
-            print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
-            log_line += f'{epoch_idx}\t\t{global_metrics.wavg.error:.4f}\t\t'
-            global_metrics.flush()
+            store_pose_prior_metrics(
+                session_id=session_id, 
+                epoch_idx=epoch_idx, 
+                dataset=options.dataset, 
+                data_type='train', 
+                global_metrics=global_metrics)
+            store_overall_metrics(
+                session_id=session_id, 
+                epoch_idx=epoch_idx, 
+                dataset=options.dataset, 
+                data_type='train', 
+                global_metrics=global_metrics)
+
+        print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
+        global_metrics.flush()
+        
+        print('############## VALIDATION #################')
+        score_nn.eval()
+
+        for iteration, batch_items in enumerate(valid_dataloader):
+            # Load sample on CPU.
+            _, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
             
-            print('############## VALIDATION #################')
-            valid_score = 0
-            pose_nn.eval()
+            Rs = gt_Rs
+            ts = gt_ts
+            
+            Ks = gt_Ks
+            num_frames = est_2d.shape[0]
 
-            for iteration, batch_items in enumerate(valid_dataloader):
-                # Load sample on CPU.
-                corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
-                
-                Rs = gt_Rs
-                ts = gt_ts
-                
-                if not opt.camdsac_only:
-                    Ks = gt_Ks
-                    num_frames = est_2d.shape[0]
+            for fidx in range(num_frames):
+                _, global_metrics, pool_metrics = dsac_model(
+                    etd_2d_pose=est_2d[fidx], 
+                    Ks=Ks, 
+                    Rs=Rs, 
+                    ts=ts, 
+                    gt_3d=gt_3d[fidx], 
+                    mean=mean, 
+                    std=std, 
+                    metrics=global_metrics)
 
-                    for fidx in range(num_frames):
-                        _, global_metrics, pool_metrics = \
-                            pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
-
-                        log_stdout(
-                            dataset='VALID', 
-                            epoch_idx=epoch_idx, 
-                            iteration=iteration, 
-                            fidx=fidx, 
-                            num_frames=num_frames, 
-                            global_metrics=global_metrics, 
-                            pool_metrics=pool_metrics,
-                            detailed=opt.detailed_logs)
-                    
-                    if opt.transfer == -1:
-                        store_qualitative(
-                            session_id=session_id, 
-                            epoch_idx=epoch_idx, 
-                            iteration=iteration, 
-                            dataset=opt.dataset, 
-                            dat_type='valid', 
-                            pool_metrics=pool_metrics)
-                
-                store_overall_metrics(
+                log_stdout(
+                    dataset='VALID', 
+                    epoch_idx=epoch_idx, 
+                    iteration=iteration, 
+                    fidx=fidx, 
+                    num_frames=num_frames, 
+                    global_metrics=global_metrics, 
+                    pool_metrics=pool_metrics,
+                    detailed=options.detailed_logs)
+            
+            if options.transfer == -1:
+                store_qualitative(
                     session_id=session_id, 
                     epoch_idx=epoch_idx, 
-                    dataset=opt.dataset, 
-                    data_type='valid', 
-                    global_metrics=global_metrics)
-                store_pose_prior_metrics(
-                    session_id=session_id, 
-                    epoch_idx=epoch_idx, 
-                    dataset=opt.dataset, 
-                    data_type='valid', 
-                    global_metrics=global_metrics)
-                
-            print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
-            log_line += f'{global_metrics.wavg.error:.4f}\t\t'
+                    iteration=iteration, 
+                    dataset=options.dataset, 
+                    dat_type='valid', 
+                    pool_metrics=pool_metrics)
             
-            if global_metrics.wavg.error < min_mean_mpjpe:
-                min_mean_mpjpe = global_metrics.wavg.error
-                torch.save({
-                    'epoch': epoch_idx,
-                    'pose_nn_state_dict': pose_nn.state_dict(),
-                    'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
-                    }, 
-                    f'models/{session_id}_best.pt'
-                )
+            store_overall_metrics(
+                session_id=session_id, 
+                epoch_idx=epoch_idx, 
+                dataset=options.dataset, 
+                data_type='valid', 
+                global_metrics=global_metrics)
+            store_pose_prior_metrics(
+                session_id=session_id, 
+                epoch_idx=epoch_idx, 
+                dataset=options.dataset, 
+                data_type='valid', 
+                global_metrics=global_metrics)
+            
+        print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
+        
+        if global_metrics.wavg.error < min_mean_mpjpe:
+            min_mean_mpjpe = global_metrics.wavg.error
             torch.save({
                 'epoch': epoch_idx,
-                'pose_nn_state_dict': pose_nn.state_dict(),
-                'opt_pose_nn_state_dict': opt_pose_nn.state_dict()
+                'pose_nn_state_dict': score_nn.state_dict(),
+                'opt_pose_nn_state_dict': optimizer.state_dict()
                 }, 
-                f'models/{session_id}_last.pt'
+                f'models/{session_id}_best.pt'
             )
+        torch.save({
+            'epoch': epoch_idx,
+            'pose_nn_state_dict': score_nn.state_dict(),
+            'opt_pose_nn_state_dict': optimizer.state_dict()
+            }, 
+            f'models/{session_id}_last.pt'
+        )
 
-            global_metrics.flush()
+        global_metrics.flush()
 
-        if opt.test:
-            print('########### TEST ##############')
-            model_suffix = 'est' if opt.use_estimated else 'known'
-            pose_nn_state_dict = torch.load(PRETRAINED_PATH.format(calib=model_suffix))['pose_nn_state_dict']
-            pose_nn.load_state_dict(pose_nn_state_dict)
-            pose_nn.eval()
 
-            test_score = 0
-            mpjpe_scores_transfer = []
+def _test(
+        options: Namespace, 
+        session_id: str,
+        dsac_model: PoseDSAC,
+        score_nn: Sequential,
+        test_dataloaders: DataLoader,
+        global_metrics: GlobalMetrics,
+        mean: np.ndarray,
+        std: np.ndarray
+    ) -> None:
+    print('########### TEST ##############')
+    model_suffix = 'est' if options.use_estimated else 'known'
+    score_nn_state_dict = torch.load(
+        PRETRAINED_PATH.format(calib=model_suffix))['pose_nn_state_dict']
+    score_nn.load_state_dict(score_nn_state_dict)
+    score_nn.eval()
+
+    mpjpe_scores_transfer = []
+
+    for test_dataloader in test_dataloaders:
+        for iteration, batch_items in enumerate(test_dataloader):
+            # Load sample on CPU.
+            _, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
             
-            for test_dataloader in test_dataloaders:
-                for iteration, batch_items in enumerate(test_dataloader):
-                    # Load sample on CPU.
-                    corresponds, est_2d, gt_3d, gt_Ks, gt_Rs, gt_ts = [x.cpu() for x in batch_items]
-                    
-                    Rs = gt_Rs
-                    ts = gt_ts
-                    
-                    if not opt.camdsac_only:
-                        Ks = gt_Ks
-                        num_frames = est_2d.shape[0]
+            Rs = gt_Rs
+            ts = gt_ts
+            
+            Ks = gt_Ks
+            num_frames = est_2d.shape[0]
 
-                        for fidx in range(num_frames):
-                            _, global_metrics, pool_metrics = \
-                                pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
+            for fidx in range(num_frames):
+                _, global_metrics, pool_metrics = dsac_model(
+                    std_2d_pose=est_2d[fidx], 
+                    Ks=Ks, 
+                    Rs=Rs, 
+                    ts=ts, 
+                    gt_3d=gt_3d[fidx], 
+                    mean=mean, 
+                    std=std, 
+                    metrics=global_metrics)
 
-                            log_stdout(
-                                dataset='TEST', 
-                                epoch_idx=epoch_idx, 
-                                iteration=iteration, 
-                                fidx=fidx, 
-                                num_frames=num_frames, 
-                                global_metrics=global_metrics, 
-                                pool_metrics=pool_metrics,
-                                detailed=opt.detailed_logs)
+                log_stdout(
+                    dataset='TEST', 
+                    epoch_idx=0, 
+                    iteration=iteration, 
+                    fidx=fidx, 
+                    num_frames=num_frames, 
+                    global_metrics=global_metrics, 
+                    pool_metrics=pool_metrics,
+                    detailed=options.detailed_logs)
 
-                            if np.isnan(global_metrics.diff_to_triang):
-                                print('')
-
-                        if opt.transfer == -1:
-                            store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'test', pool_metrics)
-
-                    store_overall_metrics(
-                        session_id=session_id, 
-                        epoch_idx=epoch_idx, 
-                        dataset=opt.dataset, 
-                        data_type='test', 
-                        global_metrics=global_metrics)
-                    store_pose_prior_metrics(
-                        session_id=session_id, 
-                        epoch_idx=epoch_idx, 
-                        dataset=opt.dataset, 
-                        data_type='test', 
-                        global_metrics=global_metrics)
-                
-                print(f'Test finished. Mean MPJPE: {global_metrics.wavg.error}')
-
-                mpjpe_scores_transfer.append(global_metrics.wavg.error)
-
-                logger.write(f'{global_metrics.wavg.error:.2f}\n')
-                global_metrics.flush()
-
-            if opt.transfer != -1:
-                store_transfer_learning_metrics(
+            if opt.transfer == -1:
+                store_qualitative(
                     session_id=session_id, 
-                    epoch_idx=epoch_idx, 
-                    errors=mpjpe_scores_transfer)
+                    epoch_idx=0, 
+                    iteration=iteration, 
+                    dataset=opt.dataset, 
+                    data_type='test', 
+                    poo_metrics=pool_metrics)
 
-    logger.close()
+            store_overall_metrics(
+                session_id=session_id, 
+                epoch_idx=0, 
+                dataset=opt.dataset, 
+                data_type='test', 
+                global_metrics=global_metrics)
+            store_pose_prior_metrics(
+                session_id=session_id, 
+                epoch_idx=0, 
+                dataset=opt.dataset, 
+                data_type='test', 
+                global_metrics=global_metrics)
+        
+        print(f'Test finished. Mean MPJPE: {global_metrics.wavg.error}')
+
+        mpjpe_scores_transfer.append(global_metrics.wavg.error)
+        global_metrics.flush()
+
+    if opt.transfer != -1:
+        store_transfer_learning_metrics(
+            session_id=session_id, 
+            epoch_idx=0, 
+            errors=mpjpe_scores_transfer)
 
 
 if __name__ == '__main__':
     torch.manual_seed(0)
     np.random.seed(0)
     # Parse command line args.
-    opt, session_id, hyperparams_string = parse_args()
+    opt, session_id = parse_args()
 
-    run_pose(
-        opt=opt, 
-        session_id=session_id, 
-        hyperparams_string=hyperparams_string)
+    run(opt=opt, session_id=session_id)

@@ -1,8 +1,11 @@
 # Author: Kristijan Bartol
 
-
-import argparse
-import json
+from typing import Tuple
+from argparse import (
+    Namespace, 
+    ArgumentParser,
+    ArgumentDefaultsHelpFormatter
+)
 from datetime import datetime
 import sys
 
@@ -10,17 +13,14 @@ sys.path.append('/general-3d-humans/')
 from src.dataset import TRANSFER_CAM_SETS
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
+def parse_args() -> Tuple[Namespace, str]:
+    parser = ArgumentParser(
         description='A model for differentiable RANSAC of autocalibration and 3D human pose.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=ArgumentDefaultsHelpFormatter
     )
 
     parser.add_argument('--rootdir', type=str, default='./results/',
         help='root directory where 2D predictions, 3D GT and camera params are stored')
-
-    #parser.add_argument('--dataset', type=str, default='human36m',
-    #    help='the dataset (either human36m or cmu)')
 
     parser.add_argument('--layers_camdsac', type=int, nargs='+', default=[700, 500, 300, 300, 100],
         help='number of neurons per layer')
@@ -136,9 +136,7 @@ def parse_args():
 
     opt = parser.parse_args()
 
-
     session_id = datetime.now().strftime('%d-%b-%Y_%H:%M:%S')
-    hyperparams_string = json.dumps(vars(opt), indent=4)
 
     # NOTE: Number of joints is fixed to 17 (to be able to transfer CMU -> H36M).
     if opt.transfer >= 0:
@@ -153,4 +151,4 @@ def parse_args():
         if opt.posedsac_only:
             opt.cam_idxs = TRANSFER_CAM_SETS[4]     # [0, 1, 2, 3]
 
-    return opt, session_id, hyperparams_string
+    return opt, session_id
