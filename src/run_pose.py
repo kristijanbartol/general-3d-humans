@@ -1,4 +1,5 @@
 # Author: Kristijan Bartol
+from typing import Tuple
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -20,6 +21,14 @@ from src.log import log_stdout
 
 
 def run(opt: Namespace, session_id: str) -> None:
+    ''' Run function for the pose estimation model.
+    
+        Args:
+            opt: Namespace
+                The command line options namespace (see `options.py`).
+            session_id: str
+                Identifier used for storing the trained model.
+    '''
     (pose_dsac, 
      score_nn, 
      optimizer, 
@@ -52,7 +61,36 @@ def run(opt: Namespace, session_id: str) -> None:
         )   
 
    
-def _prepare(opt: Namespace):
+def _prepare(opt: Namespace
+        ) -> Tuple[
+            PoseDSAC, 
+            Sequential, 
+            optim.Adam, 
+            dict, 
+            GlobalMetrics, 
+            np.ndarray, 
+            np.ndarray]:
+    ''' Prepare model, data, optimizer, and other common vars.
+    
+        Args:
+            opt: Namespace
+                The command line options namespace (see `options.py`).
+        Returns:
+            dsac_model: PoseDSAC
+                Pose DSAC model (see `dsac.py` -> PoseDSAC class).
+            score_nn: Sequential
+                The only learnable part of the model (MLP, see `score.py`).
+            optimizer: optim.Adam (default)
+                The standard PyTorch optimizer.
+            dataloaders: dict
+                Train, validation, and test dataloaders.
+            global_metrics: GlobalMetrics
+                The object to keep track of the global metrics (see `metrics.py`).
+            mean: np.ndarray
+                Mean keypoint coordinates for the dataset.
+            std: np.ndarray
+                Std of keypoint coordinates for the dataset.
+    '''
     # Create datasets.
     train_set, valid_set, test_sets = init_datasets(opt)
 
@@ -129,6 +167,30 @@ def _train(
         mean: np.ndarray, 
         std: np.ndarray
     ) -> None:
+    ''' Run train of the pose estimation model.
+    
+        Args:
+            options: Namespace
+                The command line options namespace (see `options.py`).
+            session_id: str
+                Identifier used for storing the trained model.
+            dsac_model: PoseDSAC
+                Pose DSAC model (see `dsac.py` -> PoseDSAC class).
+            score_nn: Sequential
+                The only learnable part of the model (MLP, see `score.py`).
+            optimizer: optim.Adam (default)
+                The standard PyTorch optimizer.
+            train_dataloader: dict
+                Train set dataloader.
+            valid_dataloader: dict
+                Validation set dataloader.
+            global_metrics: GlobalMetrics
+                The object to keep track of the global metrics (see `metrics.py`).
+            mean: np.ndarray
+                Mean keypoint coordinates for the dataset.
+            std: np.ndarray
+                Std of keypoint coordinates for the dataset.
+    '''
     min_mean_mpjpe = 1000.
     
     for epoch_idx in range(options.num_epochs):
@@ -247,6 +309,24 @@ def _test(
         mean: np.ndarray,
         std: np.ndarray
     ) -> None:
+    ''' Run evaluation (test) of the pose estimation model.
+    
+        Args:
+            options: Namespace
+                The command line options namespace (see `options.py`).
+            dsac_model: PoseDSAC
+                Pose DSAC model (see `dsac.py` -> PoseDSAC class).
+            score_nn: Sequential
+                The only learnable part of the model (MLP, see `score.py`).
+            test_dataloader: dict
+                Test set dataloader.
+            global_metrics: GlobalMetrics
+                The object to keep track of the global metrics (see `metrics.py`).
+            mean: np.ndarray
+                Mean keypoint coordinates for the dataset.
+            std: np.ndarray
+                Std of keypoint coordinates for the dataset.
+    '''
     print('########### TEST ##############')
     model_suffix = 'est' if options.use_estimated else 'known'
     score_nn_state_dict = torch.load(
