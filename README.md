@@ -6,7 +6,7 @@ This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triang
 The repository will soon contain the complete instructions and demos for training and inference of
 the models. 
 
-NOTE: There is still a bit more work to do to make scripts more user-friendly. I apologize for that - feel free to reach
+**NOTE:** There is still a bit more work to do to make scripts more user-friendly. I apologize for that - feel free to reach
 out if you encounter any issues!
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
