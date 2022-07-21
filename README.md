@@ -64,7 +64,7 @@ But we already prepared some training/evaluation [data](https://ferhr-my.sharepo
 To train on the base configuration (use Human3.6M for training), run:
 
 ```
-python src/learn_pose.py \
+python main.py \
 	--posedsac_only \
 	--transfer -1 \
 	--temp 1.8 \
@@ -93,7 +93,7 @@ A more convenient way to specify the arguments is through the .vscode/launch.jso
 Download pretrained models from [SharePoint](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/EkaiHg-8FuhDtHhL9_2vquwBdRB6JiscuEbv15tc7-HvuQ?e=PBSLl7) (password: _pretrained-3d-humans_).
 
 ```
-python src/learn_pose.py \
+python main.py \
 	--posedsac_only \
 	--transfer -1 \
 	--temp 1.8 \
