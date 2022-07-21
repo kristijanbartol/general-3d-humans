@@ -32,13 +32,13 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [ ] Complete the documentation
 - [X] [26-04-2022] Pretrained pose estimation learning model
 - [ ] Pretrained fundamental matrix estimation learning model
+- [X] [28-04-2022] Instructions for running inference
 - [ ] Demo (main) scripts to run training, inference, and evaluation
 - [ ] Video demonstration
 
 ## Usage
 
-First download pretrained backbone: https://github.com/karfly/learnable-triangulation-pytorch#model-zoo,
-and place it in ./models/pretrained/.
+First download pretrained [backbone](https://github.com/karfly/learnable-triangulation-pytorch#model-zoo) and place it in ./models/pretrained/.
 
 To install and prepare the environment, use docker:
 
@@ -49,6 +49,12 @@ docker run --rm --gpus all --name <container-name> -it \
 	-v ${REPO_DIR}:/generalizable-triangulation \
 	-v ${BASE_DATA_DIR}/:/data/  <image-name>
 ```
+
+### Data preparation
+
+Prior to running any training/evaluation/inference, 2D pose detections need to be extracted. Our backmode 2D pose detector is [the baseline model](https://github.com/microsoft/human-pose-estimation.pytorch), i.e., the version available in [karfly/learnable-triangulation-pytorch](https://github.com/karfly/learnable-triangulation-pytorch#model-zoo), but the straightforward inference method is not provided so it's not straightforward to use it. Instead, but with no guarantees, pose detectors such as [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) or [MMPose](https://github.com/open-mmlab/mmpose) can be used.
+
+But we already prepared some training/evaluation [data](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/Elo0eBbuQqhDmMYCypM5W3gBCYdxHiXIeavJ6lvzGzGMfg?e=BmXjV7) :) (password: _data-3d-humans_). Extract the folder into `data/<dataset>`. Note that the Human3.6M dataset already contains bounding boxes obtained as described [here](https://github.com/karfly/learnable-triangulation-pytorch/tree/master/mvn/datasets/human36m_preprocessing).
 
 ### Pose estimation model training
 
@@ -107,7 +113,14 @@ python src/main.py \\
 ```
 
 
-### Relative camera pose estimation
+### Pose estimation model (inference)
+
+To run an inference on novel views, first use a 2D keypoint detector in all views and frames to generated 2D keypoint estimates. 
+
+Once the poses are obtained, you can run `src/inference.py`.
+
+
+### Relative camera pose estimation (inference)
 
 To estimate relative camera poses on Human3.6M using the keypoint estimation on the test data, run:
 
