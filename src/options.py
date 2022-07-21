@@ -114,6 +114,8 @@ def parse_args():
 
     parser.add_argument('--use_estimated', dest='use_estimated', action='store_true')
 
+    parser.add_argument('--detailed_logs', dest='detailed_logs', action='store_true')
+
     parser.add_argument('--entropy_to_scores', dest='entropy_to_scores', action='store_true',
         help='minimize entropy directly on scores, not softmaxed scores')
 

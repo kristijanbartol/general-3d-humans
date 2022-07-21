@@ -22,6 +22,20 @@ JOINT_NAMES = {
 }
 
 
+def store_hypotheses(epoch_idx, iteration, dataset, data_type, hpool):
+    save_path_template = os.path.join('output/', dataset, data_type, '{:02d}_{:03d}_{}.npy')
+    for hyp_idx, hyp_pose in enumerate(hpool.poses):
+        np.save(save_path_template.format(epoch_idx, iteration, hyp_idx), hyp_pose.cpu().detach().numpy())
+    
+    np.save(save_path_template.format(epoch_idx, iteration, 'best'), hpool.best.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'worst'), hpool.worst.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'most'), hpool.most.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'least') ,hpool.least.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'random'), hpool.random.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'avg'), hpool.avg.pose.cpu().detach().numpy())
+    np.save(save_path_template.format(epoch_idx, iteration, 'wavg'), hpool.wavg.pose.cpu().detach().numpy())
+
+
 def store_qualitative(session_id, epoch_idx, iteration, dataset, data_type, pool_metrics):
     dir_path = os.path.join('vis', f'{session_id}')
     if not os.path.exists(dir_path):

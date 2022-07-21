@@ -58,10 +58,10 @@ def rel_mpjpe(est: torch.Tensor,
         :param device: cuda or cpu
         :return: MPJPE score between the prediction and target (bsize,)
     '''
-    est_centered = center_pelvis(est, device)
-    gt_centered = center_pelvis(gt, device)
+    est_centered = center_pelvis(est)
+    gt_centered = center_pelvis(gt)
 
-    return mpjpe(est_centered, gt_centered, device)
+    return mpjpe(est_centered, gt_centered)
 
 
 class RatioVariances():

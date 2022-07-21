@@ -15,17 +15,12 @@ from score import create_pose_nn
 from const import CONNECTIVITY_DICT, PRETRAINED_PATH
 from options import parse_args
 from metrics import GlobalMetrics
-from log import log_stdout, log_line
+from log import log_stdout
 from visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative, \
-    store_transfer_learning_metrics
+    store_transfer_learning_metrics, store_hypotheses
    
 
-if __name__ == '__main__':
-    torch.manual_seed(0)
-    np.random.seed(0)
-    # Parse command line args.
-    opt, session_id, hyperparams_string = parse_args()
-
+def run_pose(opt, session_id, hyperparams_string):
     # Keep track of learning progress.
     logger = open(os.path.join('logs', f'{session_id}.txt'), 'w', 1)
     logger.write(f'{hyperparams_string}\n\n')
@@ -127,13 +122,43 @@ if __name__ == '__main__':
 
                         all_total_loss = 0
                         
-                    log_stdout('TRAIN', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+                    log_stdout(
+                        dataset='TRAIN', 
+                        epoch_idx=epoch_idx, 
+                        iteration=iteration, 
+                        fidx=fidx, 
+                        num_frames=num_frames, 
+                        global_metrics=global_metrics, 
+                        pool_metrics=pool_metrics, 
+                        detailed=opt.detailed_logs)
 
                 if opt.transfer == -1:
-                    store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'train', pool_metrics)
+                    store_qualitative(
+                        session_id=session_id, 
+                        epoch_idx=epoch_idx, 
+                        iteration=iteration, 
+                        dataset=opt.dataset, 
+                        data_type='train', 
+                        pool_metrics=pool_metrics)
+                    store_hypotheses(
+                        epoch_idx=epoch_idx, 
+                        iteration=iteration, 
+                        dataset=opt.dataset, 
+                        data_type='train', 
+                        pool_metrics=pool_metrics)
 
-                store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
-                store_overall_metrics(session_id, epoch_idx, opt.dataset, 'train', global_metrics)
+                store_pose_prior_metrics(
+                    session_id=session_id, 
+                    epoch_idx=epoch_idx, 
+                    dataset=opt.dataset, 
+                    data_type='train', 
+                    global_metrics=global_metrics)
+                store_overall_metrics(
+                    session_id=session_id, 
+                    epoch_idx=epoch_idx, 
+                    dataset=opt.dataset, 
+                    data_type='train', 
+                    global_metrics=global_metrics)
 
             print(f'Train epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
             log_line += f'{epoch_idx}\t\t{global_metrics.wavg.error:.4f}\t\t'
@@ -158,13 +183,37 @@ if __name__ == '__main__':
                         _, global_metrics, pool_metrics = \
                             pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                        log_stdout('VALID', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+                        log_stdout(
+                            dataset='VALID', 
+                            epoch_idx=epoch_idx, 
+                            iteration=iteration, 
+                            fidx=fidx, 
+                            num_frames=num_frames, 
+                            global_metrics=global_metrics, 
+                            pool_metrics=pool_metrics,
+                            detailed=opt.detailed_logs)
                     
                     if opt.transfer == -1:
-                        store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'valid', pool_metrics)
+                        store_qualitative(
+                            session_id=session_id, 
+                            epoch_idx=epoch_idx, 
+                            iteration=iteration, 
+                            dataset=opt.dataset, 
+                            dat_type='valid', 
+                            pool_metrics=pool_metrics)
                 
-                store_overall_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
-                store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'valid', global_metrics)
+                store_overall_metrics(
+                    session_id=session_id, 
+                    epoch_idx=epoch_idx, 
+                    dataset=opt.dataset, 
+                    data_type='valid', 
+                    global_metrics=global_metrics)
+                store_pose_prior_metrics(
+                    session_id=session_id, 
+                    epoch_idx=epoch_idx, 
+                    dataset=opt.dataset, 
+                    data_type='valid', 
+                    global_metrics=global_metrics)
                 
             print(f'Validation epoch finished. Mean MPJPE: {global_metrics.wavg.error}')
             log_line += f'{global_metrics.wavg.error:.4f}\t\t'
@@ -214,7 +263,15 @@ if __name__ == '__main__':
                             _, global_metrics, pool_metrics = \
                                 pose_dsac(est_2d[fidx], Ks, Rs, ts, gt_3d[fidx], mean_3d, std_3d, global_metrics)
 
-                            log_stdout('TEST', epoch_idx, iteration, fidx, num_frames, global_metrics, pool_metrics)
+                            log_stdout(
+                                dataset='TEST', 
+                                epoch_idx=epoch_idx, 
+                                iteration=iteration, 
+                                fidx=fidx, 
+                                num_frames=num_frames, 
+                                global_metrics=global_metrics, 
+                                pool_metrics=pool_metrics,
+                                detailed=opt.detailed_logs)
 
                             if np.isnan(global_metrics.diff_to_triang):
                                 print('')
@@ -222,19 +279,42 @@ if __name__ == '__main__':
                         if opt.transfer == -1:
                             store_qualitative(session_id, epoch_idx, iteration, opt.dataset, 'test', pool_metrics)
 
-                    store_overall_metrics(session_id, epoch_idx, opt.dataset, 'test', global_metrics)
-                    store_pose_prior_metrics(session_id, epoch_idx, opt.dataset, 'test', global_metrics)
+                    store_overall_metrics(
+                        session_id=session_id, 
+                        epoch_idx=epoch_idx, 
+                        dataset=opt.dataset, 
+                        data_type='test', 
+                        global_metrics=global_metrics)
+                    store_pose_prior_metrics(
+                        session_id=session_id, 
+                        epoch_idx=epoch_idx, 
+                        dataset=opt.dataset, 
+                        data_type='test', 
+                        global_metrics=global_metrics)
                 
                 print(f'Test finished. Mean MPJPE: {global_metrics.wavg.error}')
-                log_line += f'{global_metrics.best.error:.4f}\t\t{(global_metrics.triang.error):.4f}\t\t' \
-                    '{global_metrics.wavg.error:.4f}\t\t{(global_metrics.avg.error):.4f}\t\t{(global_metrics.random.error):.4f}'
 
                 mpjpe_scores_transfer.append(global_metrics.wavg.error)
 
-                logger.write(f'{log_line}\n')
+                logger.write(f'{global_metrics.wavg.error:.2f}\n')
                 global_metrics.flush()
 
             if opt.transfer != -1:
-                store_transfer_learning_metrics(session_id, epoch_idx, mpjpe_scores_transfer)
+                store_transfer_learning_metrics(
+                    session_id=session_id, 
+                    epoch_idx=epoch_idx, 
+                    errors=mpjpe_scores_transfer)
 
     logger.close()
+
+
+if __name__ == '__main__':
+    torch.manual_seed(0)
+    np.random.seed(0)
+    # Parse command line args.
+    opt, session_id, hyperparams_string = parse_args()
+
+    run_pose(
+        opt=opt, 
+        session_id=session_id, 
+        hyperparams_string=hyperparams_string)
