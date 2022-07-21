@@ -37,7 +37,7 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [ ] Pretrained fundamental matrix estimation learning model
 - [X] [28-04-2022] Instructions for running inference
 - [X] Demo (main) scripts to run training and evaluation
-- [ ] Video demonstration
+- [ ] Project page
 
 ## Usage
 
