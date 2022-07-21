@@ -4,8 +4,10 @@
 import argparse
 import json
 from datetime import datetime
+import sys
 
-from dataset import TRANSFER_CAM_SETS
+sys.path.append('/general-3d-humans/')
+from src.dataset import TRANSFER_CAM_SETS
 
 
 def parse_args():

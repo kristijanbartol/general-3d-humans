@@ -3,10 +3,12 @@
 
 import torch
 import kornia
+import sys
 
-from multiview import evaluate_projection, evaluate_reconstruction
-from metrics import rel_mpjpe
-from abstract import LossFunction
+sys.path.append('/general-3d-humans/')
+from src.multiview import evaluate_projection, evaluate_reconstruction
+from src.metrics import rel_mpjpe
+from src.abstract import LossFunction
 
 
 def cross_entropy_loss(est, gt):

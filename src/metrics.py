@@ -4,8 +4,10 @@
 from collections import OrderedDict
 import torch
 import numpy as np
+import sys
 
-from const import CONNECTIVITY_DICT, SEGMENT_IDXS
+sys.path.append('/general-3d-humans/')
+from src.const import CONNECTIVITY_DICT, SEGMENT_IDXS
 
 
 def mpjpe(est: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:

@@ -9,8 +9,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import sys
 
-from const import CONNECTIVITY_DICT
+sys.path.append('/general-3d-humans/')
+from src.const import CONNECTIVITY_DICT
 
 
 JOINT_NAMES = {

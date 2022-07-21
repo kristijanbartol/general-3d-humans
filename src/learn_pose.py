@@ -1,22 +1,22 @@
 # Author: Kristijan Bartol
-
-
-from metrics import GlobalMetrics
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
 import numpy as np
+import sys
 
-from dsac import PoseDSAC
-from dataset import init_datasets
-from loss import MPJPELoss
-from score import create_pose_nn
-from const import CONNECTIVITY_DICT, PRETRAINED_PATH
-from options import parse_args
-from metrics import GlobalMetrics
-from log import log_stdout
-from visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative, \
+sys.path.append('/general-3d-humans/')
+from src.metrics import GlobalMetrics
+from src.dsac import PoseDSAC
+from src.dataset import init_datasets
+from src.loss import MPJPELoss
+from src.score import create_pose_nn
+from src.const import CONNECTIVITY_DICT, PRETRAINED_PATH
+from src.options import parse_args
+from src.metrics import GlobalMetrics
+from src.log import log_stdout
+from src.visualize import store_overall_metrics, store_pose_prior_metrics, store_qualitative, \
     store_transfer_learning_metrics, store_hypotheses
    
 

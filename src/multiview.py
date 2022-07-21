@@ -11,8 +11,10 @@ import kornia
 import copy
 import cv2
 from scipy.spatial.transform import Rotation as R
+import sys
 
-from trifocal import Trifocal
+sys.path.append('/general-3d-humans/')
+from src.trifocal import Trifocal
 
 #IDXS = [3, 0]
 #IDXS = [3, 1, 2]
