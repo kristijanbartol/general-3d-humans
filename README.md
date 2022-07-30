@@ -6,7 +6,9 @@ This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triang
 The repository will soon contain the complete instructions and demos for training and inference of
 the models. 
 
-**NOTE:** The demo where you could put your own keypoint detections / images and produce 3D poses on any data will be ready next week (29th July).
+**Latest release:** Inference script (assuming previously extracted 2D keypoints and known camera parameters) - see the instructions below.
+
+**Next release**: Extract 2D keypoint using this repository and estimate camera extrinsics.
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
@@ -34,6 +36,7 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [ ] Complete the documentation
 - [X] [26-04-2022] Pretrained pose estimation learning model
 - [X] [26-04-2022] Demo to obtain camera parameters from multi-frame keypoints (`src/fundamental.py`)
+- [X] Demo to obtain 3D poses from arbitrary image sequence (previously calibrated)
 - [ ] **Demo to obtain 3D poses from arbitrary image sequence (uncalibrated)**
 - [X] [28-04-2022] Instructions for running inference
 - [X] [21-07-2022] Training and evaluation functions
@@ -83,8 +86,11 @@ python main.py --run_mode eval
 
 To run an inference on novel views, first use a 2D keypoint detector in all views and frames to generated 2D keypoint estimates. 
 
-Once the poses are obtained, you can run `src/inference.py`.
+Once the poses are obtained, you can run:
 
+```
+python main.py --run_mode infer
+```
 
 ### Relative camera pose estimation (inference)
 
