@@ -2,13 +2,23 @@
 
 ## Introduction
 
-This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280).
-The repository will soon contain the complete instructions and demos for training and inference of
-the models. 
+Ever tried to run a pretrained multi-view 3D pose estimation on your own data? We address the problem that these models perform significantly worse on novel camera arrangements, if it's even possible to run them. This is the source code for the CVPR 2022 paper [Generalizable Human Pose Triangulation](https://arxiv.org/abs/2110.00280).
 
-**Latest release:** Inference script (assuming previously extracted 2D keypoints and known camera parameters) - see the instructions below.
+✅ **Latest release:** (v0.1) 
 
-**Next release**: Extract 2D keypoint using this repository and estimate camera extrinsics.
+- add inference script (assuming previously extracted 2D keypoints and known camera parameters);
+- run inference from `main.py`;
+- add instructions and command line options (see _3D pose estimation model (inference)_).
+
+🚧 **Next release**:  (v0.2)
+
+- add a script to extract 2D keypoints (using off-the-shelf 2D detector such as OpenPose);
+- estimate camera extrinsics for your cameras;
+- short tutorial on how to estimate camera extrinsics and estimate 3D poses for any multi-view data!
+
+### Note
+
+It is already possible to estimate camera extrinsics if you previously extract 2D keypoints (see _Relative camera pose estimation (inference)_).
 
 <img src="https://github.com/kristijanbartol/general-humans/blob/main/assets/transfer-learning-fig.png" width="650">
 
@@ -38,6 +48,7 @@ We plan to completely prepare the source code with the pretrained models, demos,
 - [X] [26-04-2022] Demo to obtain camera parameters from multi-frame keypoints (`src/fundamental.py`)
 - [X] Demo to obtain 3D poses from arbitrary image sequence (previously calibrated)
 - [ ] **Demo to obtain 3D poses from arbitrary image sequence (uncalibrated)**
+- [ ] Short tutorial on how to obtain camera parameters and 3D poses on any multi-view data
 - [X] [28-04-2022] Instructions for running inference
 - [X] [21-07-2022] Training and evaluation functions
 - [ ] Project page
@@ -82,7 +93,7 @@ python main.py --run_mode eval
 ```
 
 
-### Pose estimation model (inference)
+### 3D pose estimation model (inference)
 
 To run an inference on novel views, first use a 2D keypoint detector in all views and frames to generated 2D keypoint estimates. 
 
