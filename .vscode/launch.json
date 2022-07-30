@@ -22,7 +22,7 @@
                 //"--temp_gamma", "0.9",
                 //"--train_iterations", "10",
                 //"--valid_iterations", "10",
-                ////"--use_estimated",
+                ////"--custom_dataset",
                 //"--pose_hypotheses", "200",
                 //"--layers_posedsac", "1000", "900", "900", "900", "900", "700", 
                 //"--entropy_beta_pose", "0.01",
@@ -31,7 +31,7 @@
                 //"--body_lengths_mode", "2",
                 //"--batch_size", "16",
                 ////"--weighted_selection",
-                //"--run_mode", "eval"
+                "--run_mode", "test"
             ]
         }
     ]

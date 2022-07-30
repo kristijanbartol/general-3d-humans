@@ -102,7 +102,7 @@ def parse_args() -> Tuple[Namespace, str]:
 
     parser.add_argument('--hard', dest='hard', action='store_true')
 
-    parser.add_argument('--use_estimated', dest='use_estimated', action='store_true')
+    parser.add_argument('--custom_dataset', dest='custom_dataset', action='store_true')
 
     parser.add_argument('--detailed_logs', dest='detailed_logs', action='store_true')
 
@@ -112,7 +112,7 @@ def parse_args() -> Tuple[Namespace, str]:
     parser.add_argument('--weighted_selection', dest='weighted_selection', action='store_true',
         help='weighted selection (regression) instead of probabilistic selection (generative)')
 
-    parser.add_argument('--run_mode', type=str, choices=['train', 'eval', 'infer'], default='train',
+    parser.add_argument('--run_mode', type=str, choices=['train', 'test', 'infer'], default='train',
         help='whether to test on test set')
 
     parser.add_argument('--cpu', dest='cpu', action='store_true')

@@ -14,7 +14,7 @@ from src.dsac import PoseDSAC
 from src.dataset import init_datasets
 from src.loss import MPJPELoss
 from src.score import create_pose_nn
-from src.const import CONNECTIVITY_DICT, PRETRAINED_PATH
+from src.const import CONNECTIVITY_DICT, H36M_PRETRAINED_PATH
 from src.options import parse_args
 from src.metrics import GlobalMetrics
 from src.log import log_stdout
@@ -37,7 +37,7 @@ def run(opt: Namespace, session_id: str) -> None:
      mean, 
      std) = _prepare(opt)
     
-    if opt.run_mode == 'eval':
+    if opt.run_mode == 'test':
         _test(
             options=opt, 
             dsac_model=pose_dsac,
@@ -217,9 +217,9 @@ def _train(
                     Ks=Ks, 
                     Rs=Rs, 
                     ts=ts, 
-                    gt_3d=gt_3d[fidx], 
                     mean=mean, 
                     std=std, 
+                    gt_3d=gt_3d[fidx],
                     metrics=global_metrics)
 
                 all_total_loss += total_loss
@@ -263,9 +263,9 @@ def _train(
                     Ks=Ks, 
                     Rs=Rs, 
                     ts=ts, 
-                    gt_3d=gt_3d[fidx], 
                     mean=mean, 
                     std=std, 
+                    gt_3d=gt_3d[fidx], 
                     metrics=global_metrics)
 
                 log_stdout(
@@ -328,9 +328,9 @@ def _test(
                 Std of keypoint coordinates for the dataset.
     '''
     print('########### TEST ##############')
-    model_suffix = 'est' if options.use_estimated else 'known'
+    model_suffix = 'custom' if options.custom_dataset else 'original'
     score_nn_state_dict = torch.load(
-        PRETRAINED_PATH.format(calib=model_suffix))['pose_nn_state_dict']
+        H36M_PRETRAINED_PATH.format(calib=model_suffix))['pose_nn_state_dict']
     score_nn.load_state_dict(score_nn_state_dict)
     score_nn.eval()
 
@@ -353,9 +353,9 @@ def _test(
                     Ks=Ks, 
                     Rs=Rs, 
                     ts=ts, 
-                    gt_3d=gt_3d[fidx], 
                     mean=mean, 
                     std=std, 
+                    gt_3d=gt_3d[fidx],
                     metrics=global_metrics)
 
                 log_stdout(
@@ -372,10 +372,6 @@ def _test(
 
         mpjpe_scores_transfer.append(global_metrics.wavg.error)
         global_metrics.flush()
-        
-        
-def infer():
-    pass
 
 
 if __name__ == '__main__':

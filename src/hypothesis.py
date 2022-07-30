@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 class Hypothesis():
 
-    def __init__(self, est_pose, gt_pose, loss_fun):
+    def __init__(self, est_pose, gt_pose=None, loss_fun=None):
         self.est_pose = est_pose
         self.gt_pose = gt_pose
         self.loss_fun = loss_fun
@@ -17,8 +17,8 @@ class Hypothesis():
 
     @property
     def loss(self):
-        if torch.isnan(self.loss_fun(self.est_pose, self.gt_pose)):
-            print('')
+        if self.loss_fun is None:
+            return 0.
         return self.loss_fun(self.est_pose, self.gt_pose)
 
     @property
@@ -28,10 +28,11 @@ class Hypothesis():
 
 class HypothesisPool():
 
-    def __init__(self, nhyps, njoints, gt_3d, loss_fun, device):
+    def __init__(self, nhyps, njoints, gt_3d=None, loss_fun=None, device='cpu'):
         self.nhyps = nhyps
         self.njoints = njoints
 
+        # TODO: Propagate the case when loss function is None (for inference).
         self.gt_3d = gt_3d
         self.loss_fun = loss_fun
         self.device = device

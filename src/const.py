@@ -1,7 +1,11 @@
 # Author: Kristijan Bartol
+import os
 
 
-PRETRAINED_PATH = './models/pretrained/h36m_{calib}.pt'
+H36M_PRETRAINED_PATH = './models/pretrained/h36m_{calib}.pt'
+INFER_DATA_DIR = './data/custom/'
+INFER_SAVE_DIR = './output/custom/'
+INFER_SAVE_PATH = os.path.join(INFER_SAVE_DIR, 'pose_{idx}.npy')
 
 # TODO: Create constants for 'cmu', 'human36m' strings.
 

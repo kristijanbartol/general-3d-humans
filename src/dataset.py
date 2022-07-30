@@ -45,7 +45,7 @@ ORD_SUBJECT_MAP = {
 class Human36MDataset(Dataset):
     '''A Dataset class for Human3.6M dataset.'''
 
-    def __init__(self, rootdir, data_type, cam_idxs, use_estimated=False, num_joints=17, num_frames=30, num_iterations=50):
+    def __init__(self, rootdir, data_type, cam_idxs, custom_dataset=False, num_joints=17, num_frames=30, num_iterations=50):
         '''The constructor loads and prepares predictions, GTs, and class parameters.
 
         rootdir --- the directory where the predictions, camera params and GT are located
@@ -64,7 +64,7 @@ class Human36MDataset(Dataset):
         self.gt_3d = dict.fromkeys(self.sidxs)
         self.bboxes = dict.fromkeys(self.sidxs)
 
-        self.use_estimated = use_estimated
+        self.custom_dataset = custom_dataset
 
         self.cam_idxs = cam_idxs
         self.num_cameras = len(cam_idxs)
@@ -87,7 +87,7 @@ class Human36MDataset(Dataset):
             sidx = int(dirname[1:]) if dirname[0] == 'S' else -1
             if not sidx in self.sidxs:
                 continue
-            Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs, self.use_estimated)
+            Ks, Rs, ts = self.__load_camera_params(sidx, cam_idxs, self.custom_dataset)
             self.Ks[sidx] = Ks
             self.Rs[sidx] = Rs
             self.ts[sidx] = ts
@@ -135,7 +135,7 @@ class Human36MDataset(Dataset):
         # TODO: Obtain GT scale to estimate translation also.
 
     @staticmethod
-    def __load_camera_params(subject_idx, cam_idxs, use_estimated=False):
+    def __load_camera_params(subject_idx, cam_idxs, custom_dataset=False):
         '''Loading camera parameters for given subject and camera subset.
 
         Loads camera parameters for a given subject and subset cameras.
@@ -156,7 +156,7 @@ class Human36MDataset(Dataset):
         Rs = np.stack(Rs, axis=0)
         ts = np.stack(ts, axis=0)
 
-        if use_estimated:
+        if custom_dataset:
             est_Rs = np.load('./results/est_Rs.npy')
             est_ts = np.load('./results/est_ts.npy')
 
@@ -269,7 +269,7 @@ TRANSFER_CAM_SETS = [
 
 class CmuPanopticDataset(Dataset):
 
-    def __init__(self, rootdir, data_type, cam_idxs, use_estimated=False, num_joints=19, num_frames=30, num_iterations=50):
+    def __init__(self, rootdir, data_type, cam_idxs, custom_dataset=False, num_joints=19, num_frames=30, num_iterations=50):
         self.rootdir = rootdir
         self.data_type = data_type
         self.cam_idxs = cam_idxs
@@ -279,7 +279,7 @@ class CmuPanopticDataset(Dataset):
 
         self.num_views = len(self.cam_idxs)
 
-        self.use_estimated = use_estimated
+        self.custom_dataset = custom_dataset
 
         # Load data.
         self.Ks, self.Rs, self.ts = self.__load_camera_params()
@@ -402,13 +402,53 @@ def init_datasets(opt):
         #    cam_test_set.append(TRANSFER_CAM_SETS[set_idx])
         cam_test_set.append(TRANSFER_CAM_SETS[opt.transfer])
 
-    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, use_estimated=False, num_joints=opt.num_joints, 
+    train_set = dataset(data_rootdir, TRAIN, opt.cam_idxs, custom_dataset=False, num_joints=opt.num_joints, 
         num_frames=opt.num_frames, num_iterations=opt.train_iterations)
-    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, use_estimated=False, num_joints=opt.num_joints, 
+    valid_set = dataset(data_rootdir, VALID, opt.cam_idxs, custom_dataset=False, num_joints=opt.num_joints, 
         num_frames=opt.num_frames, num_iterations=opt.valid_iterations)
 
     # TODO: Update magic number.
-    test_set = Human36MDataset('./data/human36m', TEST, [0, 1, 2, 3], use_estimated=opt.use_estimated, 
+    test_set = Human36MDataset('./data/human36m', TEST, [0, 1, 2, 3], custom_dataset=opt.custom_dataset, 
         num_joints=opt.num_joints, num_frames=opt.num_frames, num_iterations=40)
 
     return train_set, valid_set, [test_set]
+
+
+
+class CustomTestDataset(Dataset):
+    '''A Dataset class for custom test dataset.'''
+
+    def __init__(self, kpts, Rs, ts, mean, std, num_joints=17):
+        self.kpts = kpts
+        self.num_joints = num_joints
+
+        # Use intrinsics from H36M, for now.
+        labels = np.load('/data/human36m/extra/human36m-multiview-labels-GTbboxes.npy', 
+            allow_pickle=True).item()
+        camera_params = labels['cameras'][SUBJECT_ORD_MAP[1]]
+
+        self.K = camera_params[0][2]
+        self.Rs = Rs
+        self.ts = ts
+        self.mean = mean
+        self.std = std
+        
+        self.num_views = self.kpts.shape[1]
+
+    def __len__(self):
+        return self.kpts.shape[0]
+
+    def __getitem__(self, idx):
+        frame_kpts = self.kpts[idx]
+
+        # All points stacked along a single dimension for a single subject.
+        point_corresponds = np.concatenate(
+            np.split(frame_kpts, frame_kpts.shape[0], axis=0), axis=2)[0]
+
+        point_corresponds = torch.from_numpy(np.array(point_corresponds))
+        frame_kpts = torch.from_numpy(frame_kpts) 
+        Ks = torch.from_numpy(np.array(self.K)).unsqueeze(0).tile(self.num_views, 1, 1)
+        Rs = torch.from_numpy(np.array(self.Rs))
+        ts = torch.from_numpy(np.array(self.ts))
+
+        return frame_kpts, Ks, Rs, ts

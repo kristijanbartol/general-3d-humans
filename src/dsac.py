@@ -241,7 +241,7 @@ class PoseDSAC(DSAC):
         exp_beta: float, 
         est_beta: float,
         score_nn: Callable, 
-        loss_function: LossFunction, 
+        loss_function: LossFunction = None, 
         device: str = 'cpu'
     ) -> None:
         ''' PoseDSAC constructor.
@@ -371,7 +371,7 @@ class PoseDSAC(DSAC):
 
         return self.score_nn(network_input.cuda())
 
-    def __call__(self, est_2d_pose, Ks, Rs, ts, gt_3d, mean, std, metrics):
+    def __call__(self, est_2d_pose, Ks, Rs, ts, mean, std, gt_3d=None, metrics=None):
         ''' Perform robust, differentiable triangulation.
 
             Parameters
@@ -426,14 +426,15 @@ class PoseDSAC(DSAC):
 
         # Update metrics.
         # TODO: Could reduce the number of lines.
-        metrics.best.update(hpool.best.loss, hpool.best.pose)
-        metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
-        metrics.most.update(hpool.most.loss, hpool.most.pose)
-        metrics.least.update(hpool.least.loss, hpool.least.pose)
-        metrics.stoch.update(hpool.random.loss, hpool.random.pose)
-        metrics.random.update(hpool.random.loss, hpool.random.pose)
-        metrics.avg.update(hpool.avg.loss, hpool.avg.pose)
-        metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)
-        metrics.triang.update(hpool.triang.loss, hpool.triang.pose)
+        if metrics is not None:
+            metrics.best.update(hpool.best.loss, hpool.best.pose)
+            metrics.worst.update(hpool.worst.loss, hpool.worst.pose)
+            metrics.most.update(hpool.most.loss, hpool.most.pose)
+            metrics.least.update(hpool.least.loss, hpool.least.pose)
+            metrics.stoch.update(hpool.random.loss, hpool.random.pose)
+            metrics.random.update(hpool.random.loss, hpool.random.pose)
+            metrics.avg.update(hpool.avg.loss, hpool.avg.pose)
+            metrics.wavg.update(hpool.wavg.loss, hpool.wavg.pose)
+            metrics.triang.update(hpool.triang.loss, hpool.triang.pose)
 
         return total_loss, metrics, hpool

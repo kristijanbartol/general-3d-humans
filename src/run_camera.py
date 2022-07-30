@@ -6,7 +6,8 @@ import os
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 
-from multiview import find_rotation_matrices_numpy, \
+from .const import INFER_DATA_DIR
+from .multiview import find_rotation_matrices_numpy, \
     solve_four_solutions_numpy, distance_between_projections_numpy, \
     evaluate_projection_numpy, evaluate_reconstruction_numpy
 
@@ -303,6 +304,74 @@ def estimate_params():
     np.save('est_Rs.npy', np.array(est_Rs, dtype=np.float32))
     #np.save('./results/est_ts.npy', np.array(est_ts, dtype=np.float32))
     np.save('est_ts.npy', np.array(est_ts, dtype=np.float32))
+    
+    
+def estimate_camera_params(kpts):
+    Ks, _, _ = load_camera_params(SUBJECT_IDX, IDXS)
+
+    frame_selection = np.random.choice(
+            np.arange(kpts.shape[0]), size=M)
+
+    kpts = kpts[frame_selection][:, IDXS]
+
+    # All points stacked along a single dimension.
+    point_corresponds = np.concatenate(
+        np.split(kpts, kpts.shape[0], axis=0), 
+        axis=2)[0].swapaxes(0, 1)
+
+    # TODO: Set the scale so that all the people are 1.80m.
+    scale = 1.
+    R0 = np.array([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
+    t0 = np.array([0., 0., 0.])
+
+    # RANSAC loop.
+    for _ in range(N):
+        # Selecting indexes (sampling).
+        selected_idxs = np.random.choice(
+            np.arange(point_corresponds.shape[0]), size=S, replace=False)
+
+        # Find camera parameters using 8-point algorithm.
+        # TODO: Rename: find_rotation_matrices* -> find_camera_parameters*.
+        R_est1, R_est2, t_rel_est, _ = find_rotation_matrices_numpy(
+            point_corresponds[selected_idxs], Ks)
+
+        try:
+        # Select correct rotation and find translation sign.
+            t_rel_est *= scale
+            R_est_rel, t_est_rel = solve_four_solutions_numpy(
+                point_corresponds, Ks, R0, t0, 
+                (R_est1, R_est2), t_rel_est)
+        except:
+            #print('Not all positive')
+            continue
+
+    return R_est_rel, t_est_rel
+
+    
+def run():
+    np.random.seed(2022)
+    est_Rs = [ np.eye(3) ]
+    est_ts = [ np.zeros((3, 1)) ]
+    
+    # TODO: get the number of views based on provided keypoints
+    num_views = -1
+    kpts = None
+    
+    for cam_idxs in [(0, n) for n in range(num_views)]:
+        # TODO: select subset of views
+        kpts = kpts     
+        R_rel, t_rel = estimate_camera_params(cam_idxs)
+        est_Rs.append(R_rel)
+        est_ts.append(t_rel)
+
+    np.save(
+        os.path.join(INFER_DATA_DIR, 'est_Rs.npy'), 
+        np.array(est_Rs, dtype=np.float32))
+    np.save(
+        os.path.join(INFER_DATA_DIR, 'est_ts.npy'), 
+        np.array(est_ts, dtype=np.float32))
+    
+    return est_Rs, est_ts
 
 
 if __name__ == '__main__':
