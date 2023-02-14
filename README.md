@@ -71,7 +71,7 @@ docker run --rm --gpus all --name <container-name> -it \
 
 Prior to running any training/evaluation/inference, 2D pose detections need to be extracted. Our backmode 2D pose detector is [the baseline model](https://github.com/microsoft/human-pose-estimation.pytorch), i.e., the version available in [karfly/learnable-triangulation-pytorch](https://github.com/karfly/learnable-triangulation-pytorch#model-zoo), but the straightforward inference method is not provided so it's not straightforward to use it. Instead, but with no guarantees, pose detectors such as [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) or [MMPose](https://github.com/open-mmlab/mmpose) can be used.
 
-But we already prepared some training/evaluation [data](https://ferhr-my.sharepoint.com/:f:/g/personal/kbartol_fer_hr/Elo0eBbuQqhDmMYCypM5W3gBCYdxHiXIeavJ6lvzGzGMfg?e=BmXjV7) :) (password: _data-3d-humans_). Extract the folder into `data/<dataset>`. Note that the Human3.6M dataset already contains bounding boxes obtained as described [here](https://github.com/karfly/learnable-triangulation-pytorch/tree/master/mvn/datasets/human36m_preprocessing).
+But we already prepared some training/evaluation [data](https://ferhr-my.sharepoint.com/:f:/g/personal/kb47186_fer_hr/EkaiHg-8FuhDtHhL9_2vquwBdRB6JiscuEbv15tc7-HvuQ?e=H1ad7K) :) (password: _data-3d-humans_). Extract the folder into `data/<dataset>`. Note that the Human3.6M dataset already contains bounding boxes obtained as described [here](https://github.com/karfly/learnable-triangulation-pytorch/tree/master/mvn/datasets/human36m_preprocessing).
 
 ### Pose estimation model training
 
